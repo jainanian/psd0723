@@ -6,7 +6,6 @@ date: "2023-05-18"
 
 ```{r }
 require(tidyverse)
-save.image("//jna_nol/asus/msi/work/farmer welfare/PSD/230523 fi data local.RData")
 
 # https://cran.r-project.org/web/packages/credentials/vignettes/intro.html
 require(credentials)
@@ -18,11 +17,6 @@ git_credential_update("https://github.com/jainanian/psd2")
 # load data
 ## ps data
 ```{r setup, include=FALSE}
-load("//jna_nol/asus/msi/work/farmer welfare/PSD/230518 fi data local.RData")
-df %>% 
-  writexl::write_xlsx(
-    "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/Livestock/230623_psd.xlsx"
-  )
 
 
 ```
@@ -33,16 +27,6 @@ df %>%
 ```{r }
 
 # is FY
-fsis_1991 <- readxl::read_excel(
-  "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/Poultry/head counts_FY_1991_2022.xlsx", sheet = "eADRS Achive FY1998_FY2004"
-)
-fsis_2004 <- readxl::read_excel(
-  "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/Poultry/head counts_FY_1991_2022.xlsx", sheet = "Slaughter Heads FY2004_FY2022"
-)
-fsis_2023 <- readxl::read_excel(
-  "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/Poultry/Copy of FP_4864_Daily_Head_count_2022_2023_.xlsx", 
-  sheet = "FY 2022 2023"
-)
 
 ```
 
@@ -245,11 +229,6 @@ fsis_cy_addy_geoNA <- fsis_cy_addy_geo %>%
     
   )
 
- fsis_cy_addy_geoNA%>% 
-  writexl::write_xlsx(
-    "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/230624_psd_geoNA.xlsx"
-  )
-
   
 ```
 
@@ -280,7 +259,7 @@ fill = TRUE
 ```
 
 ```{r }
-fsis_addy <- readfsis_address_excel( listpaths = "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/Poultry")
+
 
 ```
 
@@ -317,10 +296,7 @@ require(future.callr)
 plan(callr)
   # require(patentsview)
   options(future.globals.maxSize= 891289600)
-  Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyAPDeQDzi2hnbExzE4bqjDnxeimB0BBaRk")
-# Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyBrAwY8cKg-P6TcHCjGFLLXvV2bYGCK3GY")
 
-hereR::set_key("CkWj2vJnfIcejHqTpP5SfVGV9VKfJxoKWf9CDDnbq5I")
 require(tidygeocoder)
 
 
@@ -376,14 +352,8 @@ fsis_addy2 <- fsis_addy_edit%>%
 
 
 fsis_addy2_geo <- func_futuregeocode1(passdf_df = fsis_addy2 )
-fsis_addy2_geo%>% 
-  writexl::write_xlsx(
-    "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/230623_fsis_geo.xlsx"
-  )
-fsis_addy2_geo_correct <- 
-  readxl::read_excel(
-    "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/230623_fsis_geocorrect.xlsx"
-  )
+
+
 
 ```
 
@@ -494,10 +464,6 @@ getfips_df_out
 fsis_addy2_geofips <-fsis_addy2_geo_correct %>% 
   # head(10) %>% 
 getfips(getfips_df = .) 
-fsis_addy2_geofips %>% 
-  writexl::write_xlsx(
-     "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/230624_psd_geoFIPS.xlsx"
-  )
 ```
 
 ## future geo func
@@ -513,10 +479,7 @@ require(future.callr)
 plan(callr)
   # require(patentsview)
   options(future.globals.maxSize= 891289600)
-  Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyAPDeQDzi2hnbExzE4bqjDnxeimB0BBaRk")
-# Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyBrAwY8cKg-P6TcHCjGFLLXvV2bYGCK3GY")
 
-hereR::set_key("CkWj2vJnfIcejHqTpP5SfVGV9VKfJxoKWf9CDDnbq5I")
 require(tidygeocoder)
 
 passdf_df <- df %>% 
@@ -647,8 +610,6 @@ func_futuregeocode(passdf_df = .  )
 
 ### geocode func
 ```{r }
-Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyBrAwY8cKg-P6TcHCjGFLLXvV2bYGCK3GY")
-Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyBrAwY8cKg-P6TcHCjGFLLXvV2bYGCK3GY")
 
 findlocsfunc <- function(x){
 rm(zzlist)
@@ -656,10 +617,6 @@ zzlist <- list()
 
 require(tidygeocoder)
   # require(tidygeocoder)
-  Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyAPDeQDzi2hnbExzE4bqjDnxeimB0BBaRk")
-# Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyBrAwY8cKg-P6TcHCjGFLLXvV2bYGCK3GY")
-
-hereR::set_key("CkWj2vJnfIcejHqTpP5SfVGV9VKfJxoKWf9CDDnbq5I")
 
 i = 1
 while(i<= nrow(x))
@@ -777,8 +734,6 @@ loadWorkbook_url <- function(url) {
    # loadWorkbook(temp_file, isUnzipped = TRUE)
 #   d
 }
-
-archives_df <-  loadWorkbook_url(url ="https://github.com/jainanian/psd2/blob/main/230630_archivesorg_table.xlsx" ) 
 
   
 archives_df <- jsonlite::fromJSON(
