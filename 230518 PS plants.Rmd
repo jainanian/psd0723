@@ -1,0 +1,1602 @@
+---
+title: "PSD"
+output: html_document
+date: "2023-05-18"
+---
+
+```{r }
+require(tidyverse)
+save.image("//jna_nol/asus/msi/work/farmer welfare/PSD/230523 fi data local.RData")
+
+# https://cran.r-project.org/web/packages/credentials/vignettes/intro.html
+require(credentials)
+git_credential_update("https://github.com/jainanian/psd2")
+# https://stackoverflow.com/questions/24314622/rcurl-form-login
+# https://cran.r-project.org/web/packages/curl/vignettes/intro.html
+```
+
+# load data
+## ps data
+```{r setup, include=FALSE}
+load("//jna_nol/asus/msi/work/farmer welfare/PSD/230518 fi data local.RData")
+df %>% 
+  writexl::write_xlsx(
+    "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/Livestock/230623_psd.xlsx"
+  )
+
+
+```
+
+## fsis data
+
+### load each
+```{r }
+
+# is FY
+fsis_1991 <- readxl::read_excel(
+  "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/Poultry/head counts_FY_1991_2022.xlsx", sheet = "eADRS Achive FY1998_FY2004"
+)
+fsis_2004 <- readxl::read_excel(
+  "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/Poultry/head counts_FY_1991_2022.xlsx", sheet = "Slaughter Heads FY2004_FY2022"
+)
+fsis_2023 <- readxl::read_excel(
+  "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/Poultry/Copy of FP_4864_Daily_Head_count_2022_2023_.xlsx", 
+  sheet = "FY 2022 2023"
+)
+
+```
+
+#### edit for cy
+```{r }
+
+fsis_cy <- bind_rows(
+  fsis_1991, fsis_2004, fsis_2023
+) %>% 
+  janitor::clean_names() %>% 
+    # distinct()%>% 
+  mutate(
+    citystate = coalesce(city_state,city_ctate ), 
+    year =  coalesce(fy, f_year  ) , 
+    zipcode = zip_code, 
+    est_num = coalesce(est_nbr, estnbr ), 
+    street = address
+  ) %>% 
+  unite(
+    "address",address, citystate, zipcode, remove = FALSE, sep = ", ",na.rm = TRUE
+  ) %>% 
+  select(
+  street,address,class, animal,circuit_nbr,  citystate, zipcode, est_num,est_name, year, month_1:month_12
+  ) %>% 
+  gather(
+    key = month, 
+    value = value,
+    month_1:month_12 
+  ) %>% 
+  mutate(
+    month_number = gsub(".*_", "", month)  %>% as.numeric()
+  ) %>% 
+  mutate(
+    year_c = case_when(
+      month_number <3 ~ year-1, 
+      TRUE ~ year
+    )
+  ) %>% 
+  mutate(
+    month_c = 
+      as.Date(ISOdate(year_c, month_number, 1))
+  ) %>% 
+  select(
+   street, address,class, animal,circuit_nbr,  citystate, zipcode, est_num,est_name,  contains("_c"), value
+  )
+
+
+```
+
+<!-- #### function to correct year -->
+<!-- ```{r } -->
+<!-- correctyear <- function(correctyear_df){ -->
+<!--   require(lubridate) -->
+<!-- correctyear_df_correct <-  correctyear_df %>%  -->
+<!--   mutate( -->
+<!--     month2 =   month(mdy(month)) -->
+<!--   ) %>%  -->
+
+<!-- } -->
+<!-- ``` -->
+
+#### function to retrieve all address for NA
+```{r }
+getNAaddress <- function( getna_df){
+  getna_df_notna <- getna_df %>%
+    filter(!is.na(street)) %>% 
+    filter(!is.na(citystate))
+  
+getna_df_LU <-  getna_df_notna %>% 
+# 
+#     mutate(
+#       street_nchar = nchar(street)
+#     ) %>% 
+    group_by(est_num, street,citystate ) %>% 
+    slice(1) %>% 
+    ungroup() %>% 
+    select(
+      est_num, address, street,citystate
+    ) %>% 
+    distinct()
+     
+  getna_df_unique_na <- getna_df %>% 
+    filter(
+      !est_num %in% c(getna_df_notna$est_num)
+    ) %>% 
+    select(
+      -address, -street, -citystate
+    ) %>% 
+    # select(est_num) %>% 
+    # distinct()
+    inner_join(
+      getna_df_LU, by = c( "est_num")
+    ) %>% 
+    filter(!is.na(address)) %>% 
+    bind_rows(
+       getna_df %>% 
+    filter(
+      !est_num %in% c(getna_df_notna$est_num)
+    ) %>% 
+      anti_join(
+        getna_df_LU, by = c( "est_num")
+      ) %>% 
+  unite(
+    "address",street, citystate, zipcode, remove = FALSE, sep = ", ",na.rm = TRUE
+  )
+      
+     
+    ) %>% 
+  
+  
+    bind_rows(
+       getna_df %>% 
+    filter(
+       est_num %in% c(getna_df_notna$est_num)
+    ) 
+    )
+  getna_df_unique_na
+}
+
+```
+
+##### use func and join to geo
+```{r }
+fsis_cy_addy <- fsis_cy %>% 
+  getNAaddress(getna_df = .)  
+
+```
+
+###### join to geo
+
+````{r }
+
+ fsis_cy_addy_geo <- fsis_cy_addy %>% 
+  left_join(
+    fsis_addy2_geofips %>% 
+      select(
+       address, address1, lat, long, GEOID_char
+      ), 
+    by = c("address")
+  )   %>% 
+   mutate(
+     class = 
+       case_when(
+         class  == "Other Domesticated G" ~ "Other Domesticated Game Birds", 
+         class == "Other Voluntary Poul"  ~ "Other Voluntary Poultry", 
+         class  == "Goos" ~ "Goose", 
+         TRUE ~ class
+       )
+   )
+fsis_cy_addy_geo %>% 
+  data.table::fwrite(
+    "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/230624_psd_geo.csv"
+  )
+```
+
+```{r }
+
+fsis_cy_addy_geo %>%
+  group_by(
+    year_c, est_num, address1, class
+  ) %>% 
+  summarise(
+    value = sum(value, na.rm = TRUE)
+  ) %>% 
+  ungroup() %>% 
+  filter(
+    is.na(address1)
+  ) %>%
+  group_by(
+    year_c, class
+  ) %>% 
+  summarise(
+   numna = length(unique(est_num)), 
+   total_production = sum(value, na.rm  = TRUE)
+  ) %>% 
+  ungroup() %>% 
+  arrange(
+    -numna
+  ) %>% 
+  View()
+
+```
+
+###### output NA
+```{r }
+fsis_cy_addy_geoNA <- fsis_cy_addy_geo %>%
+  filter(
+    is.na(lat)
+  ) %>%  
+  group_by(
+  est_num,   year_c, address1, citystate 
+  ) %>% 
+  summarise(
+    value  = sum(value, na.rm=TRUE), 
+    class = paste(class %>% unique() %>% sort(), collapse =", ")
+  ) %>% 
+  ungroup() %>% 
+  arrange(
+    est_num, year_c
+    
+  )
+
+ fsis_cy_addy_geoNA%>% 
+  writexl::write_xlsx(
+    "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/230624_psd_geoNA.xlsx"
+  )
+
+  
+```
+
+### func to load data for geo
+```{r }
+
+readfsis_address_excel <- function( listpaths){
+  listpaths_df <- data.table::rbindlist(
+  (
+    tibble(
+  files =
+    list.files(listpaths, pattern = "xlsx$", full.names =  TRUE, recursive = FALSE)
+)  %>%
+  filter(
+    !grepl("~",files, perl = TRUE)
+  ) %>% 
+  mutate(
+    GEOID = purrr::map(files,
+                       ~readxl::read_excel(.x ))
+  )
+  )$GEOID,
+fill = TRUE
+)%>% 
+  unnest()
+  
+}
+
+```
+
+```{r }
+fsis_addy <- readfsis_address_excel( listpaths = "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/Poultry")
+
+```
+
+```{r }
+
+fsis_addy_edit <- fsis_addy  %>% 
+    select(
+      contains("address", ignore.case = TRUE), contains("City", ignore.case = TRUE)  , contains("year", ignore.case = TRUE), contains("zipcode", ignore.case = TRUE)
+    ) %>% 
+    # distinct()%>% 
+  mutate(
+    citystate = coalesce(CityState,CityCtate ), 
+    year =  coalesce(GrantYear, Year, FYear ) , 
+    zipcode = ZipCode
+  ) %>% 
+  unite(
+    "address",Address, citystate, zipcode, remove = FALSE, sep = ", ",na.rm = TRUE
+  )
+```
+
+# geocode
+
+
+## future geo func 1 
+```{r setup, include=FALSE}
+
+func_futuregeocode1 <- function(passdf_df  ) {
+require(parallel)
+  require(furrr)
+  require(tidyverse)
+  # require(tidytext)
+require(callr)
+require(future.callr)
+plan(callr)
+  # require(patentsview)
+  options(future.globals.maxSize= 891289600)
+  Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyAPDeQDzi2hnbExzE4bqjDnxeimB0BBaRk")
+# Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyBrAwY8cKg-P6TcHCjGFLLXvV2bYGCK3GY")
+
+hereR::set_key("CkWj2vJnfIcejHqTpP5SfVGV9VKfJxoKWf9CDDnbq5I")
+require(tidygeocoder)
+
+
+locfunc  <-function(passk, passdf ){
+  # require()
+  passout <-   passdf[passk,] %>% 
+    select(
+      address
+    ) %>% 
+  geocode_combine(
+    queries = list(
+      # list(method = 'census'),
+      # list(method = 'osm'),
+      # list(method = 'here'),
+      list(method = 'google')
+    ),
+    # cascade_order = c("HereR", "google"),
+
+    global_params = list(address = 'address')
+  ) #%>% 
+   # select(
+   #   -address
+   # )
+  
+  passout
+    # passout
+}
+
+# many_models <- data_frame(K = numlist) %>%
+#   mutate(topic_model = future_map(K, ~stm(books_sparse, K = .,
+#                                           verbose = FALSE, seed = TRUE)))
+
+passdf_df_na <- passdf_df
+called_df <-  passdf_df_na  %>%
+  mutate(
+      k = row_number()
+  ) %>% 
+  mutate(topic_model = future_map(k, ~locfunc(passk = ., passdf=passdf_df_na)))
+
+called_df_flat <- called_df %>% 
+  unnest()
+called_df_flat
+}
+```
+
+```{r }
+fsis_addy2 <- fsis_addy_edit%>% 
+  select(
+    address
+  ) %>% 
+  filter(nchar(address)>2)%>% 
+  distinct()
+
+
+fsis_addy2_geo <- func_futuregeocode1(passdf_df = fsis_addy2 )
+fsis_addy2_geo%>% 
+  writexl::write_xlsx(
+    "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/230623_fsis_geo.xlsx"
+  )
+fsis_addy2_geo_correct <- 
+  readxl::read_excel(
+    "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/230623_fsis_geocorrect.xlsx"
+  )
+
+```
+
+### code FIPS
+
+#### FIPS func
+```{r }
+#sample fcc"https://geo.fcc.gov/api/census/block/find?latitude=-1.295782&longitude=36.86078&format=json"
+
+getfips <- function(getfips_df) {
+  urlbase2<-"https://geo.fcc.gov/api/census/block/find?"
+Sys.setenv(CENSUS_KEY="f34b257823aefaa70a771366abc35a7458e06623")
+# library(eiCompare) #https://rdrr.io/github/lorenc5/eiCompare/man/latlong2fips.html
+
+require(parallel)
+  require(furrr)
+  require(tidyverse)
+  # require(tidytext)
+require(callr)
+require(future.callr)
+plan(callr)
+  # require(patentsview)
+  options(future.globals.maxSize= 891289600)
+
+require(tidyverse)
+
+  
+locfunc  <-function(passk, passdf ){
+  # require()
+  passout <-   passdf[passk,] %>% 
+    select(
+      lat, long
+    )%>% 
+  mutate(
+    url = paste0(urlbase2,"&latitude=", lat,"&longitude=", long,"&format=json")
+    )%>%
+  dplyr::mutate(
+    GEOID = purrr::map(url,
+                     ~possibly(~jsonlite::fromJSON(.x)$County$FIPS,otherwise=NA)(.x))
+  ) %>% 
+    mutate(
+      GEOID_char = GEOID %>% as.character()
+    ) %>% 
+    select(
+     GEOID_char
+    )
+  
+  
+  passout
+    # passout
+}
+
+# many_models <- data_frame(K = numlist) %>%
+#   mutate(topic_model = future_map(K, ~stm(books_sparse, K = .,
+#                                           verbose = FALSE, seed = TRUE)))
+getfips_df_unique <- getfips_df%>% 
+  select(
+    lat, long
+  ) %>% 
+  distinct() %>% 
+  mutate(
+    k = row_number()
+  )
+
+called_df <-  getfips_df_unique %>%
+  mutate(topic_model = future_map(k, ~locfunc(passk = ., passdf=getfips_df_unique)))
+
+called_df_flat <- called_df %>% 
+  unnest(cols = c("topic_model"))
+
+called_df_flat_first <- called_df_flat %>% 
+  filter(
+    nchar(GEOID_char)>=2
+  )
+
+called_df_flat_retry <-called_df_flat %>% 
+  filter(
+    !k %in% c(called_df_flat_first$k )
+  ) %>% 
+  select(
+    names(getfips_df_unique )
+  ) %>% 
+  mutate(
+    k = row_number()
+  )
+
+called_df_flat_retryFIPS <- called_df_flat_retry%>%
+  mutate(topic_model = future_map(k, ~locfunc(passk = ., passdf=called_df_flat_retry)))
+
+called_df_flat_cb <- called_df_flat_first  %>% 
+  bind_rows(
+    called_df_flat_retry
+  ) %>% 
+  distinct()
+getfips_df_out <- getfips_df %>% 
+  left_join(
+    called_df_flat_cb, 
+    by = c("lat", "long")
+  )
+getfips_df_out
+}
+
+# data_barge_w_locs_fips <- getfips(barge_lockLU)
+ 
+```
+
+```{R }
+fsis_addy2_geofips <-fsis_addy2_geo_correct %>% 
+  # head(10) %>% 
+getfips(getfips_df = .) 
+fsis_addy2_geofips %>% 
+  writexl::write_xlsx(
+     "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/230624_psd_geoFIPS.xlsx"
+  )
+```
+
+## future geo func
+```{r setup, include=FALSE}
+
+func_futuregeocode <- function(passdf_df  ) {
+require(parallel)
+  require(furrr)
+  require(tidyverse)
+  # require(tidytext)
+require(callr)
+require(future.callr)
+plan(callr)
+  # require(patentsview)
+  options(future.globals.maxSize= 891289600)
+  Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyAPDeQDzi2hnbExzE4bqjDnxeimB0BBaRk")
+# Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyBrAwY8cKg-P6TcHCjGFLLXvV2bYGCK3GY")
+
+hereR::set_key("CkWj2vJnfIcejHqTpP5SfVGV9VKfJxoKWf9CDDnbq5I")
+require(tidygeocoder)
+
+passdf_df <- df %>% 
+  filter(
+    !is.na(city)
+  ) #  %>% 
+  # head()
+
+passdf_df_na <-passdf_df %>% 
+  filter(
+    !is.na(city)
+  ) %>% 
+  group_by(
+    city, state
+  ) %>% 
+  slice(1) %>% 
+  ungroup() %>%
+  mutate(
+    address = paste0(city, ", ", state), 
+    
+      k = row_number()
+    
+  ) 
+
+
+
+locfunc  <-function(passk, passdf ){
+  # require()
+  passout <-   passdf[passk,] %>% 
+    select(
+      address
+    ) %>% 
+  geocode_combine(
+    queries = list(
+      # list(method = 'census'),
+      # list(method = 'osm'),
+      # list(method = 'here'),
+      list(method = 'google')
+    ),
+    # cascade_order = c("HereR", "google"),
+
+    global_params = list(address = 'address')
+  ) %>% 
+    select(
+      -address
+    )
+  
+  passout
+    # passout
+}
+
+# many_models <- data_frame(K = numlist) %>%
+#   mutate(topic_model = future_map(K, ~stm(books_sparse, K = .,
+#                                           verbose = FALSE, seed = TRUE)))
+
+
+called_df <-  passdf_df_na %>%
+  mutate(topic_model = future_map(k, ~locfunc(passk = ., passdf=passdf_df_na)))
+
+called_df_flat <- called_df %>% 
+  unnest()
+passdf_df_city <- passdf_df %>%
+  mutate(
+    address = paste0(city, ", ", state),
+
+      k = row_number()
+
+  )  %>%
+  inner_join(
+    # passdf_df_na %>% 
+    #   left_join(
+        called_df_flat %>% 
+          filter(
+            
+            !grepl("^,",address, perl = TRUE )
+          ) %>% 
+          filter(
+            nchar(address) >=2
+          ) %>% 
+          select(
+            address, lat, long
+          ),
+        by = c("address")
+     # )# %>% 
+    #   select(
+    #     `FSIS ID`, address, lat, long, state
+    #   ),
+    # by = c("FSIS ID", "state")
+  )
+
+passdf_df_city_all <- passdf_df_city %>% 
+  bind_rows(
+    df %>% 
+      filter(
+        !ID %in% c(passdf_df_city$ID)
+        # !`FSIS ID` %in% c(passdf_df_city$`FSIS ID`)
+      ) %>% 
+      select(
+        -city
+      ) %>% 
+      left_join(
+        passdf_df_city %>% 
+          select(
+            `FSIS ID`, address, lat, long, state, city
+          ),
+    by = c("FSIS ID", "state")
+      )
+  )
+called_df
+}
+
+
+```
+
+## use func df
+```{r }
+plants_geo <- df %>% 
+  head() %>% 
+func_futuregeocode(passdf_df = .  )
+
+```
+
+
+```{r }
+
+```
+
+
+### geocode func
+```{r }
+Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyBrAwY8cKg-P6TcHCjGFLLXvV2bYGCK3GY")
+Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyBrAwY8cKg-P6TcHCjGFLLXvV2bYGCK3GY")
+
+findlocsfunc <- function(x){
+rm(zzlist)
+zzlist <- list()
+
+require(tidygeocoder)
+  # require(tidygeocoder)
+  Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyAPDeQDzi2hnbExzE4bqjDnxeimB0BBaRk")
+# Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyBrAwY8cKg-P6TcHCjGFLLXvV2bYGCK3GY")
+
+hereR::set_key("CkWj2vJnfIcejHqTpP5SfVGV9VKfJxoKWf9CDDnbq5I")
+
+i = 1
+while(i<= nrow(x))
+{
+  zzlist[[i]] <- x[i,] %>% 
+  geocode_combine(
+    # queries = list(
+    #   # list(method = 'census'),
+    #   # list(method = 'osm'),
+    #   list(method = 'here'),
+    #   list(method = 'google')
+    # ),
+    cascade_order = c("HereR", "google"),
+
+    global_params = list(address = 'address')
+  )
+Sys.sleep(.1)
+i<-i+1
+  
+}
+zzlist_unnest <- zzlist %>% bind_rows()
+zzlist_unnest
+  } 
+
+```
+
+```{R }
+actual_punc_rem <- function(x) {
+  gsub('[[:punct:]\\-\\.\\s\\/\\-\\,]+c',' ',x)
+  
+  # removePunctuation(x,ucp = TRUE)
+  
+}
+
+
+cleantext_text <- function(x){
+  str_squish(stripWhitespace(actual_punc_rem(x)))
+}
+
+
+```
+
+#### clean address string func
+```{r }
+cleanaddressstring <- function(x){
+   x %>%  mutate(address = paste0(replace_na(`Street Number`,""), " ", replace_na(`Street Name`,""), ", ", City, ", ", State, " ", `Zip Code`)) %>%
+  mutate(
+    address = 
+      str_squish(
+        gsub("^\\,", "", 
+        gsub(
+          "NONE GIVEN, |^\\.+|^,|^\\,|^\\,+|^0+|^\\-|^\\*+|^\\-+", "", gsub("^[[:punct:] \\#]", "", cleantext_text(
+            str_squish(
+              address
+            )
+          )
+          )
+        )
+      ) 
+      )
+  )  
+
+  
+}
+
+```
+
+### first geocode na lat
+```{r }
+retail_data_0_geocoded_unique <- retail_data %>%
+  filter(
+    (is.na(Latitude) | (Latitude==0) )
+  ) %>% 
+  mutate(address = paste0(replace_na(`Street Number`,""), " ", replace_na(`Street Name`,""), ", ", City, ", ", State, " ", `Zip Code`)) %>%
+  mutate(
+    address = 
+      str_squish(
+        gsub("^\\,", "", 
+        gsub(
+          "NONE GIVEN, |^\\.+|^,|^\\,|^\\,+|^0+|^\\-|^\\*+|^\\-+", "", gsub("^[[:punct:] \\#]", "", cleantext_text(
+            str_squish(
+              address
+            )
+          )
+          )
+        )
+      ) 
+      )
+  )%>% 
+  group_by(address) %>% 
+  slice(1) %>% 
+  ungroup()%>% 
+
+# retail_data_0_geocoded_unique_geo <- retail_data_0_geocoded_unique %>%
+#   head(2) %>% 
+  # head(2)%>% 
+  findlocsfunc()
+
+```
+
+# load directory pdfs
+
+## call data archives org api
+
+```{r }
+require(tidyverse)
+library(piggyback)
+require(httr)
+require(openxlsx)
+loadWorkbook_url <- function(url) {
+    temp_file <- tempfile(fileext = ".xlsx")
+    download.file(url = url, destfile = temp_file, mode = "wb", quiet = TRUE)
+    unzip(temp_file)
+  d <- readxl::read_excel( temp_file)
+   # loadWorkbook(temp_file, isUnzipped = TRUE)
+#   d
+}
+
+archives_df <-  loadWorkbook_url(url ="https://github.com/jainanian/psd2/blob/main/230630_archivesorg_table.xlsx" ) 
+
+  
+archives_df <- jsonlite::fromJSON(
+  "https://archive.org/advancedsearch.php?q=Meat+inspection+United+States+Directories&fl%5B%5D=avg_rating&fl%5B%5D=backup_location&fl%5B%5D=btih&fl%5B%5D=call_number&fl%5B%5D=collection&fl%5B%5D=contributor&fl%5B%5D=coverage&fl%5B%5D=creator&fl%5B%5D=date&fl%5B%5D=description&fl%5B%5D=downloads&fl%5B%5D=external-identifier&fl%5B%5D=foldoutcount&fl%5B%5D=format&fl%5B%5D=genre&fl%5B%5D=identifier&fl%5B%5D=imagecount&fl%5B%5D=indexflag&fl%5B%5D=item_size&fl%5B%5D=language&fl%5B%5D=licenseurl&fl%5B%5D=mediatype&fl%5B%5D=members&fl%5B%5D=month&fl%5B%5D=name&fl%5B%5D=noindex&fl%5B%5D=num_reviews&fl%5B%5D=oai_updatedate&fl%5B%5D=publicdate&fl%5B%5D=publisher&fl%5B%5D=related-external-id&fl%5B%5D=reviewdate&fl%5B%5D=rights&fl%5B%5D=scanningcentre&fl%5B%5D=source&fl%5B%5D=stripped_tags&fl%5B%5D=subject&fl%5B%5D=title&fl%5B%5D=type&fl%5B%5D=volume&fl%5B%5D=week&fl%5B%5D=year&sort%5B%5D=&sort%5B%5D=&sort%5B%5D=&rows=50&page=1&output=json"
+)
+archives_df_2 <- archives_df$response$docs %>% 
+  mutate(
+    url = paste0("https://archive.org/stream/", identifier,"/", identifier, "_djvu.txt"), 
+    pdf_url  = paste0("https://archive.org/8/items/", identifier,"/", identifier, ".pdf")
+  )
+
+archives_df_2 %>% 
+  writexl::write_xlsx(
+    "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/230630_archivesorg_table.xlsx"
+  )
+```
+
+```{r }
+archives_df <- data.table::fread(
+  "https://raw.githubusercontent.com/jainanian/psd2/main/230630_archivesorg_table.csv"
+)
+archives_df_2 <- archives_df %>% 
+  mutate(
+    url = paste0("https://archive.org/stream/", identifier,"/", identifier, "_djvu.txt"), 
+    pdf_url  = paste0("https://archive.org/8/items/", identifier,"/", identifier, ".pdf")
+  )
+
+```
+
+```{r }
+fsis_init_LU <- readxl::read_excel(
+  "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/230630_fsis_initialLU.xlsx"
+) 
+
+fsis_init_LU <- data.table::fread(
+  "https://raw.githubusercontent.com/jainanian/psd2/main/230630_fsis_initialLU.csv"
+) 
+
+# %>% 
+  # mutate(
+  #   Initial = case_when(
+  #     Initial  == "*" ~ "\\\\*", 
+  #     TRUE ~ Initial
+  #   )
+  #   )#%>% 
+  # bind_rows(
+  #   tibble(
+  #     Initial = "z", 
+  #     Long = "blank"
+  #   )
+  # )  
+
+
+# fsis_init_LU_vec <- fsis_init_LU$Initial
+fsis_init_LU_combo <- crossing(
+  combination = unlist(lapply(1:nrow(fsis_init_LU), function(n) combn(fsis_init_LU$Initial, n, paste, collapse=""))), 
+  ending = c(",", ".")
+) %>% 
+  mutate(
+    finalpattern = paste0(
+      # (gsub("\\.", ".",
+      ending,
+      # ), 
+      # (gsub( 
+      combination#, 
+      # "$"
+    )
+    
+  )
+# fsis_init_LU_combo_pattern <- fsis_init_LU_combo
+# %>% 
+#   mutate(
+#     
+#   )
+  
+```
+
+```{R }
+
+func_to_split_by_init <- function(funcsplit_df,  funcsplit_pattern )
+{
+require(data.table)
+require(tm)
+require(splitstackshape)
+  require(tidycensus)
+  
+  data(fips_code)
+funcsplit_pattern <- fsis_init_LU_combo
+
+# fsis_init_LU_combo_patterns <- funcsplit_pattern %>% 
+#   summarise(
+#     patternfinal = paste(
+#       finalpattern %>% unique(), collapse = "|"
+#     )
+#   ) %>% 
+#   ungroup()
+
+# funcfind_pattern <- function(y){
+#   
+#   
+# }
+
+
+funcsplit_readdoc <- function(x){
+  
+arch_2000_dec <- readr::read_tsv("https://archive.org/stream/CAT10193534071/CAT10193534071_djvu.txt", col_names = c("text")) %>% 
+  mutate(
+    rownum= row_number()
+  )
+  
+
+}
+funcsplit_splitinto <- function(splintinto_df , splitinto_colname = "text1", splintinto_char = "/", 
+    splitinto_outputchar = "/"){
+  
+  # splintinto_df <- arch_2000_dec_positions
+  # splitinto_colname = "text1"
+  # splintinto_char = "/"
+  # splitinto_outputchar = "/"
+  splitinto_dfLU <- splintinto_df %>% 
+    cSplit(., splitCols =splitinto_colname, splintinto_char, drop = FALSE) %>% 
+  mutate(
+    rownum2 = row_number(), 
+    id = text1,
+    type = text2
+    ) %>% 
+  gather(
+    key = textno, 
+    value = value, 
+     contains( paste0( splitinto_colname, "_"))
+  ) %>% 
+  mutate(
+    textno_num = as.numeric(
+        gsub(
+        "[^[:digit:]]", "",  value , perl = TRUE
+      )
+      ), 
+    textno_letter = (
+        gsub(
+        "[^[:alpha:]]", "",  value , perl = TRUE
+      )
+      )
+
+  ) %>% 
+      filter(
+     !is.na(textno_num )
+  )%>% 
+    mutate(
+      texno_letterM = 
+        case_when( 
+          grepl("M",textno_letter, perl = TRUE, ignore.case =TRUE )  ~ 1, 
+          TRUE ~ 0
+    ),
+    texno_letterPstart = 
+        case_when( 
+          grepl("^P",textno_letter, perl = TRUE, ignore.case =TRUE )  ~ 1, 
+          TRUE ~ 0
+    ) 
+
+    ) %>% 
+    group_by(
+      rownum
+    ) %>% 
+    mutate(
+      texno_letterM_sum = sum(texno_letterM, na.rm = TRUE), 
+      rownum_rownum = row_number()
+    ) %>% 
+    ungroup() %>% 
+    mutate(
+      textno_letter_concM = 
+        case_when(
+          # when current obs is not m and there is no other m, prefix M
+          (texno_letterM!=1)&(!(texno_letterM_sum>=1 ))&(texno_letterPstart!=1) ~ paste0(textno_letter, "M"),           
+          # when it is M or contains M, let it be the same; just put M at end
+          (texno_letterM==1)&((texno_letterM_sum>=1 )) ~ 
+            paste0(
+              gsub(
+                "M", "", textno_letter 
+              ), "M"
+              )
+              , 
+          # when it is p or contains p,put p at end
+          TRUE ~ paste0(
+              gsub(
+                "P", "", textno_letter 
+              ), "P"
+              )
+        ), 
+      textno_letter_concat = paste0(
+        textno_letter_concM,"-", textno_num
+      ), 
+      # place idsub containing M at beginning, id1, of id1/id2  pairing
+      texno_letterM_new = 
+        case_when( 
+          grepl("M",textno_letter_concat, perl = TRUE, ignore.case =TRUE )  ~ 0, 
+          TRUE ~ 1 
+    )
+    )%>%  
+    # arrange(
+    #   rownum
+    # )
+    # filter(
+    #   (nchar( textno_letter)>=1)
+    # ) %>% 
+  group_by(
+   text,  rownum
+  ) %>% 
+    arrange(texno_letterM_new) %>% 
+    # arrange(
+    #   textno_letter_concat
+    # ) 
+  summarise(
+    id_no = paste(
+      textno_letter_concat, collapse =splitinto_outputchar
+    )
+  ) %>% 
+  ungroup()   %>% 
+      arrange(
+      rownum
+    )
+
+  splintinto_df %>% 
+    left_join(
+      splitinto_dfLU %>% 
+        rename(id_origtext = text ), 
+      by = c("rownum" )
+    )
+  
+  
+} 
+
+# this takes text and separates this into two columns based on . or , ; eg .PB 
+arch_2000_dec_text  <- arch_2000_dec%>%
+  separate(text, into = c('text1', 'text2'), sep = "\\.|,", fill = "right", remove = FALSE)
+
+# this then filters down to only those where text2 delim column matches those in the pattern (Eg .pb, .s, etc); 
+# the last filter step makes sure that the pattern terminates text2
+arch_2000_dec_positions<- arch_2000_dec_text %>% 
+  # mutate(
+  #   GEOID = purrr::map(files,
+  #                      ~readxl::read_excel(.x ))
+  # ) %>% 
+  filter(
+   text2 %in% c(funcsplit_pattern$combination), 
+   nchar(text1)>=2
+  ) %>% 
+  mutate(
+    rownum2 = row_number(),
+    rownum2_end = paste0(text2, "$")
+  ) %>% 
+  group_by(
+    rownum2
+  ) %>% 
+  filter(
+    grepl(rownum2_end, text)
+  ) %>% 
+  ungroup() 
+
+
+
+# 
+# arch_2000_dec_positions_idsplit <- arch_2000_dec_positions_idsplitLU %>% 
+#   mutate(
+#     rownum2 = row_number(), 
+#     id = text1,
+#     type = text2
+#     )# %>% 
+
+# 
+# arch_2000_dec_positions_idsplit <- #arch_2000_dec_positions %>% 
+#   #mutate(
+#        cSplit(arch_2000_dec_positions, splitCols ="text1", "/", drop = FALSE) %>% 
+#   mutate(
+#     rownum2 = row_number(), 
+#     id = text1,
+#     type = text2
+#     )# %>% 
+ # ) %>% 
+  # select(
+  #   text:rownum
+  # )
+ # arch_2000_dec_positions_idsplitLU <- #arch_2000_dec_positions %>% 
+ #  #mutate(
+ #       cSplit(arch_2000_dec_text, splitCols ="text", "/", drop = FALSE) %>% 
+ #  gather(
+ #    key = textno, 
+ #    value = value, 
+ #     contains("text_")
+ #  ) %>% 
+ #  mutate(
+ #    textno_num = as.numeric(
+ #        gsub(
+ #        "[^[:digit:]]", "",  value , perl = TRUE
+ #      )
+ #      )
+ #  ) %>% 
+ #  filter(
+ #     !is.na(textno_num )
+ #  )%>% 
+ #  group_by(
+ #   text,  rownum
+ #  ) %>% 
+ #  summarise(
+ #    id_no = paste(
+ #      textno_num, collapse = "/"
+ #    )
+ #  ) %>% 
+ #  ungroup() 
+ # 
+
+ 
+ # this uses  the function that takes what we belive is the id column; and returns a standardized id format eg M-342/P-234 (ie id_no)
+
+ arch_2000_dec_positions_idsplitLU <- arch_2000_dec_positions%>% 
+  funcsplit_splitinto(
+    splintinto_df = ., 
+    splitinto_colname = "text1", 
+    splintinto_char = "/", 
+    splitinto_outputchar = "/"
+    )
+   
+ # takes the text filters to start; joins to actutal id (id) 
+ # and fills down
+ # first top id
+arch_2000_dec_text_begin <- arch_2000_dec_text %>% 
+  filter(
+    rownum >= (arch_2000_dec_positions$rownum %>% min())
+  ) %>% 
+ left_join(
+    arch_2000_dec_positions_idsplitLU %>% 
+      rename(
+        id = id_no, 
+        type = text2
+      )  %>% 
+      select(rownum, id, id_origtext, type)  %>% 
+      # mutate(
+      #   rownum2 = row_number()
+      # )
+      distinct(), 
+    by = c("rownum")
+  ) %>% 
+  # mutate(
+  #   type = 
+  # )
+  fill(
+    id, .direction = "down"
+  )%>% 
+  # fill(
+  #    rownum2, .direction = "down"
+  # )%>% 
+    fill(
+     id_origtext, .direction = "down"
+  )%>% 
+
+  fill(
+     type, .direction = "down"
+  )%>% 
+  #why is below needed
+  mutate(
+    firstchar_textcol = substr(text, 1, 1)
+    )
+
+# this next step will produce the bottom ids if present
+arch_2000_dec_text_begin_id2LU <- arch_2000_dec_text_begin %>% 
+  filter(
+    !rownum %in% c( arch_2000_dec_positions_idsplitLU$rownum)
+  ) %>% 
+  select(
+  any_of(c(arch_2000_dec_text_begin %>% names()) )  
+  ) %>% 
+    funcsplit_splitinto(
+    splintinto_df = ., 
+    splitinto_colname = "text1", 
+    splintinto_char = "/", 
+    splitinto_outputchar = "/"
+    ) 
+
+arch_2000_dec_text_begin_id2LU_LU <- arch_2000_dec_text_begin %>% 
+  left_join(
+    arch_2000_dec_text_begin_id2LU %>% 
+      rename(
+        id_bottom = id_no, 
+        id_bottomorigtext = id_origtext
+      )  %>% 
+      select(rownum, id_bottom, id_bottomorigtext)  %>% 
+      # mutate(
+      #   rownum2 = row_number()
+      # )
+      distinct(), 
+    by = c("rownum")
+  ) %>% 
+  filter(
+    id_bottom == id
+  )
+ arch_2000_dec_text_begin_id <- arch_2000_dec_text_begin %>% 
+   left_join(
+     arch_2000_dec_text_begin_id2LU_LU %>% 
+       select(
+        rownum, id_bottom, id_bottomorigtext
+       ) %>% 
+       distinct(),
+     by= c("rownum")
+   ) %>% 
+   group_by(
+     id
+   ) %>% 
+    fill(
+     id_origtext, .direction = "down"
+  )%>% 
+    fill(
+     id_bottom, .direction = "up"
+  )%>% 
+    fill(
+     id_bottomorigtext, .direction = "up"
+  ) %>% 
+   ungroup()
+ # ones that don't have accompanying bottom
+ # 7238 rownum 
+# 12PA/P834 row7298 (both 7298 and 7238 should include an M in first P if there are two Ps)
+ # 7465 # BM-21/P-748 21B/P748,PY; end is 0002 IB  M/00748  P (bc i gets coded as 1)
+ # at end of day, just want 
+ arch_2000_dec_text_begin_id %>% 
+   filter(
+     is.na(( id_bottomorigtext))
+   ) %>% 
+   View()
+# 
+#    arch_2000_dec_text_begin%>% 
+#     filter(
+#         id == "00226  M/04863"
+#     ) %>% View()
+
+ # this begins to take 
+arch_2000_dec_text_begin_firmLU <- arch_2000_dec_text_begin_id %>% 
+  filter(
+    firstchar_textcol != "("
+  ) %>% 
+  group_by(
+    id
+  ) %>% 
+  # mutate(
+  #   notes = p
+  # )
+  mutate(
+    id_rownum = row_number()
+  ) %>% 
+  ungroup() %>% 
+  mutate(
+    firstchar_textcol2= substr(text, 1, 1),
+    firm  = case_when(
+      (
+        (id_rownum ==2) #
+        & firstcharfirm != "("
+        )~ gsub(
+         "&amp;", "", 
+          text  
+        )
+    ), 
+    rownum_firmLU = 
+      case_when(
+        !is.na(firm) ~ rownum
+      )
+) %>% 
+  group_by(
+    id, rownum2
+  )  %>% 
+  fill(
+    firm,  .direction = "downup"
+  )%>% 
+  fill(
+    rownum_firmLU,  .direction = "downup"
+  ) %>% 
+  ungroup() %>% 
+  select(
+    id, rownum2, firm, rownum_firmLU
+    ) %>% 
+  distinct() %>% 
+  #needed to fill in NA in case 
+  fill(
+    firm, .direction = "down"
+  )%>% 
+  fill(
+    rownum_firmLU,  .direction = "down"
+  ) 
+
+arch_2000_dec_text_begin_firm <- arch_2000_dec_text_begin %>% 
+  left_join(
+    arch_2000_dec_text_begin_firmLU, 
+    by = c("id", "rownum2")
+  ) 
+
+arch_2000_dec_text_begin_otherprocess <- arch_2000_dec_text_begin_firm %>% 
+  filter(
+    firstcharfirm  == "(" 
+  ) %>% 
+  mutate(
+    ifmail = substr(text, 1,6) 
+  ) %>% 
+  filter(
+    !grepl( "(MAIL)" , ifmail, ignore.case = TRUE, perl = TRUE), 
+    grepl("INSPECTION",text , ignore.case = TRUE, perl = TRUE)
+  ) %>% 
+  mutate(
+    type_specialinspect = (gsub(
+       "[^[:alpha:]]|INSPECTION", "", str_squish(text)
+      )
+  )
+  )%>% 
+  group_by(
+    id, rownum2
+  ) %>% 
+  summarise(
+    type_specialinspect =  paste(type_specialinspect %>% unique() %>% sort(), collapse = ", ")
+  ) %>% 
+  ungroup()
+#%>% 
+  # mutate(
+  #   firm = case_when(
+  #     (is.na(firm) & (id_rownum ==3) & firstcharfirm != "(" )~ text,
+  #     TRUE ~ firm
+  #   ),
+  #     
+  #     firm = gsub(
+  #       "  ", " ", 
+  #       gsub(
+  #      "&amp;", "&",  firm
+  #     )
+  #     
+  #     )
+  #    
+  #   
+  # )%>% 
+  # group_by(
+  #   id, rownum2
+  # )  %>% 
+  # fill(
+  #   firm,  .direction = "downup"
+  # )%>% 
+  # ungroup()
+
+arch_2000_dec_text_begin_stateLU <-  arch_2000_dec_text_begin_firm %>% 
+  filter(
+    nchar( text2) >=2
+  ) %>% 
+  mutate(
+    poss_state = 
+      gsub(
+       "[^[:alpha:]]", "", str_squish(text2)
+      )
+      # sub(".*\\b([A-Z]{2}).*", "\\1", str_squish(text2))
+  ) %>% 
+  filter(
+    poss_state %in% c(fips_codes$state)
+  ) %>% 
+  group_by(
+    id, rownum2, firm
+  ) %>% 
+  mutate(
+    rownum_state = row_number() 
+  ) %>% 
+  ungroup() %>%  
+  filter(
+    (rownum_state == 1 )| ( rownum_state == 2 & rownum2 == max(rownum2))
+  )
+
+arch_2000_dec_text_begin_state <- arch_2000_dec_text_begin_firm %>% 
+  filter(
+    rownum < (arch_2000_dec_text_begin_stateLU$rownum %>% max()) 
+  ) %>% 
+  left_join(
+    arch_2000_dec_text_begin_stateLU %>% 
+      filter(rownum_state == 1  ) %>%
+      mutate(rownum_stateLU  = rownum) %>% 
+      select(poss_state, rownum2, id, rownum_stateLU), 
+    by = c("rownum2", "id")
+  ) %>% 
+  left_join(
+     arch_2000_dec_text_begin_otherprocess %>% 
+      # mutate(
+      #   rownum_otherprocessLU  = rownum
+      #   ) %>% 
+      select(type_specialinspect , rownum2, id), 
+    by = c("rownum2", "id")
+  )
+arch_2000_dec_text_begin_addressLU <- arch_2000_dec_text_begin_state  %>% 
+  filter(
+    rownum ==  (rownum_stateLU -1)
+    # (rownum <=  (rownum_stateLU-1)) & (rownum >rownum_firmLU) 
+  )
+   
+arch_2000_dec_text_begin_address <- arch_2000_dec_text_begin_state %>% 
+  left_join(
+    arch_2000_dec_text_begin_addressLU %>% 
+      mutate(
+        street = text
+      ) %>% 
+      select(
+        street, rownum2, id
+      ), 
+    by = c("rownum2", "id")
+  ) %>% 
+  rename(
+  state   = poss_state 
+  ) %>% 
+  group_by(
+    rownum2, id
+  ) %>% 
+  mutate(
+    rownum2_rownumwithin = row_number()
+  ) %>% 
+  ungroup()
+
+arch_2000_dec_text_begin_idLU <-
+  # split these into all ids, then gather
+         cSplit(arch_2000_dec_text_begin_address, splitCols ="text1", "/", drop = FALSE) %>% 
+  select(
+    text1,id, rownum2, contains("text1_")
+  ) %>% 
+  cbind(
+    cSplit(arch_2000_dec_text_begin_address, splitCols ="id", "/", drop = FALSE) %>% 
+  select(
+    contains("id_")
+  )
+  ) %>% 
+  gather(
+    key = textno, 
+    value = value, 
+     contains("text1_"), contains("id_")
+  )  
+
+  arch_2000_dec_text_begin_idLU2 <-  arch_2000_dec_text_begin_idLU %>% 
+    mutate(
+      id_letter =  gsub(
+       "[^[:alpha:]]", "",  value 
+      ),
+      id_number = as.numeric(
+        gsub(
+        "[^[:digit:]]", "",  value 
+      )
+      )
+    ) %>% 
+    filter(
+    nchar(id_number) >=1
+    ) 
+  
+arch_2000_dec_text_begin_idLU3 <-arch_2000_dec_text_begin_idLU2  %>% 
+    mutate(
+      id_letter_M =
+        case_when(
+         (  text1== id) & !(nchar(id_letter)>=1) ~ "M",
+         ((  text1== id)&  grepl("text1_", textno, perl = TRUE))  ~ paste0( id_letter,"M"),
+         (!(nchar(id_letter)>=1) &  grepl("id_", textno, perl = TRUE)) ~ "M",
+
+          TRUE ~ id_letter
+        ) ,
+      id_concat_m = paste0(id_letter_M,id_number )
+    ) %>% 
+  distinct() %>% 
+  group_by(
+    id,textno, id_concat_m, rownum2
+  ) %>% 
+  mutate(
+    num_id_m_occur = n(), 
+    num_id_m_occur_rowid = row_number()
+  ) %>% 
+  ungroup()
+arch_2000_dec_text_begin_idLU3 %>% 
+  filter(
+    id == "00226  M/04863"
+  ) %>% View()
+
+"00226  M/04863"
+# this should pull all top ids and trailing ids 
+arch_2000_dec_text_begin_idLU4 <-arch_2000_dec_text_begin_idLU3%>% 
+  filter(
+     grepl("text1_", textno, perl = TRUE), 
+     # ==2 should be trailing OR id = text1 captures top id
+    ( num_id_m_occur ==2 )| ( id == text1) 
+  ) %>% 
+  group_by(
+    id
+  ) %>% 
+  summarise(
+    id_concat_m = paste( id_concat_m %>% unique() %>% sort(), collapse = "+")
+  ) %>% 
+  ungroup()
+  
+  left_join(
+    arch_2000_dec_text_begin_idLU3%>% 
+  filter(
+     grepl("id_", textno, perl = TRUE)
+  )
+  )
+  
+#needs to be a bind !id in above
+
+arch_2000_dec_text_begin_idLU3 %>% 
+  filter(
+    grepl("text1", textno, perl = TRUE)
+  )   %>% 
+  group_by(
+    num_id_m_occur
+  ) %>% 
+  summarise(
+    count = length(unique(id))
+  ) %>% 
+  arrange(-count) %>% 
+  View()
+    
+arch_2000_dec_text_begin_idLU4 <- arch_2000_dec_text_begin_idLU3%>% 
+  select(
+ id,textno, id_concat_m, rownum2
+  ) %>% 
+  distinct() %>% 
+  mutate(
+    idtype = gsub("_.*","", textno, perl = TRUE )
+  ) %>% 
+  group_by(
+    id,id_concat_m, rownum2
+  )
+
+  mutate(
+    id_possible_number = 
+      # paste(
+      stringr::str_extract_all(value, "M|P|\\d+"), 
+        id_top_possible_number = 
+      # paste(
+      stringr::str_extract_all(id, "M|P|\\d+")#, 
+
+    # if_backslash = 
+    #   gsub(
+    #     "[^\\/]", "", text1
+    #   )
+      #   collapse = "/"
+      # )#,
+      
+      # gsub("([0-9]+).*$", "\\1", text) 
+  ) %>% 
+  # filter(
+  #   id_possible_number != "character(0)"
+  # ) %>%
+  unnest(
+    cols = c("id_possible_number")
+  ) %>%
+  unnest(
+    cols = c("id_top_possible_number")
+  ) %>% 
+ group_by(rownum, firm, text,rownum2) %>% 
+  summarise(
+    id_possible_number = paste(id_possible_number %>% unique() %>%as.numeric() %>%  sort() , collapse = "/" ),
+    id_top_possible_number = paste(id_top_possible_number %>% unique() %>%as.numeric() %>%  sort() , collapse = "/" )
+  ) %>% 
+  ungroup() %>%  
+  filter(
+    id_possible_number ==id_top_possible_number
+  )
+ transmute(
+   id_possible_number  = str_c(c_across("id_possible_number"), collapse = "/"),
+   id_top_possible_number = str_c(c_across("id_top_possible_number"), collapse = "/") 
+   
+   
+   )
+  group_by(
+    rownum2, id
+  ) %>% 
+  filter(
+    rownum2_rownumwithin == max( rownum2_rownumwithin)
+  ) %>% 
+  ungroup()
+arch_2000_dec_text_begin_dbaLU <- arch_2000_dec_text_begin_address %>% 
+  filter(
+    rownum < (arch_2000_dec_text_begin_stateLU$rownum %>% max()) 
+  ) %>% 
+  left_join(
+    
+  )
+
+  summarise(
+    
+  )
+  # fill()
+  mutate(
+    rownum2 = fill( )
+  )
+    
+
+}
+ 
+  
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+require(odbc)
+require(tidyverse)
+require(RODBC)
+```
+
+```{r }
+
+conn <- odbcConnect("MS Access Database;DBQ=J:/Psp Specific/Shared/FI Data/FIDataLocal annual.accdb")
+df <- sqlQuery(conn, "SELECT * FROM Yearly")
+odbcClose(conn)
+save.image("C:/Users/Jeffrey.Nian/Documents/Competition/PSD/230518 fi data local.RData")
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
