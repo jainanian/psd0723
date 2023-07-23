@@ -510,10 +510,7 @@ require(future.callr)
 plan(callr)
   # require(patentsview)
   options(future.globals.maxSize= 891289600)
-  Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyAPDeQDzi2hnbExzE4bqjDnxeimB0BBaRk")
-# Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyBrAwY8cKg-P6TcHCjGFLLXvV2bYGCK3GY")
 
-hereR::set_key("CkWj2vJnfIcejHqTpP5SfVGV9VKfJxoKWf9CDDnbq5I")
 require(tidygeocoder)
 
 passdf_df <- df %>% 
@@ -644,8 +641,6 @@ func_futuregeocode(passdf_df = .  )
 
 ### geocode func
 ```{r }
-Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyBrAwY8cKg-P6TcHCjGFLLXvV2bYGCK3GY")
-Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyBrAwY8cKg-P6TcHCjGFLLXvV2bYGCK3GY")
 
 findlocsfunc <- function(x){
 rm(zzlist)
@@ -653,10 +648,6 @@ zzlist <- list()
 
 require(tidygeocoder)
   # require(tidygeocoder)
-  Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyAPDeQDzi2hnbExzE4bqjDnxeimB0BBaRk")
-# Sys.setenv(GOOGLEGEOCODE_API_KEY = "AIzaSyBrAwY8cKg-P6TcHCjGFLLXvV2bYGCK3GY")
-
-hereR::set_key("CkWj2vJnfIcejHqTpP5SfVGV9VKfJxoKWf9CDDnbq5I")
 
 i = 1
 while(i<= nrow(x))
