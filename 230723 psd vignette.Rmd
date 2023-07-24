@@ -48,20 +48,31 @@ archives_df <- readxl::read_excel(
 ```
 
 ```{r }
+require(stringi)
+stringi_str_order <- function(y) {
+  vapply(stri_split_boundaries(toupper(y), type = "character"), function(x) stri_c(x[stri_order(x)], collapse = ""), "")
+}
+
+
+```
+
+```{r }
 fsis_init_LU <- readxl::read_excel(
   "230630_fsis_initialLU.xlsx"
 )
+
 fsis_init_LU_combo <- crossing(
   combination = unlist(lapply(1:nrow(fsis_init_LU), function(n) combn(fsis_init_LU$Initial, n, paste, collapse=""))), 
   ending = c(",", ".")
 ) %>% 
   mutate(
+    combination =  stringi_str_order( combination),
     finalpattern = paste0(
       # (gsub("\\.", ".",
       ending,
       # ), 
       # (gsub( 
-      combination#, 
+   combination #, 
       # "$"
     )
     
@@ -74,6 +85,7 @@ fsis_init_LU_combo <- crossing(
   
 ```
 
+## function to split pdfs
 ```{R }
 
 func_to_split_by_init <- function(funcsplit_df,  funcsplit_pattern )
@@ -115,10 +127,14 @@ arch_2000_dec <- readr::read_tsv("https://archive.org/stream/CAT10193534071/CAT1
 funcsplit_splitinto <- function(splintinto_df , splitinto_colname = "text1", splintinto_char = "/", 
     splitinto_outputchar = "/"){
   # 
-  # splintinto_df <- arch_2000_dec_positions
-  # splitinto_colname = "text1"
-  # splintinto_char = "/"
-  # splitinto_outputchar = "/"
+  splintinto_df <- arch_2000_dec_positions %>% 
+    filter(
+      (rownum <= 7728), 
+      rownum >= 7720
+    )
+  splitinto_colname = "text1"
+  splintinto_char = "/"
+  splitinto_outputchar = "/"
   splitinto_dfLU <- splintinto_df %>% 
     cSplit(., splitCols =splitinto_colname, splintinto_char, drop = FALSE) %>% 
   mutate(
@@ -169,6 +185,14 @@ funcsplit_splitinto <- function(splintinto_df , splitinto_colname = "text1", spl
     ) %>% 
     ungroup() %>% 
     mutate(
+      textno_num_convert_I_1 =  
+        gsub(
+          "[^[:digit:]]", 
+          "",
+          gsub(
+          "I", "1",value
+          ) , perl = TRUE
+        ) %>% as.numeric() ,
       textno_letter_concM = 
         case_when(
           # when current obs is not m and there is no other m, prefix M
@@ -214,6 +238,12 @@ funcsplit_splitinto <- function(splintinto_df , splitinto_colname = "text1", spl
   summarise(
     id_no = paste(
       textno_letter_concat, collapse =splitinto_outputchar
+    ), 
+    id_onlydecimal =  paste(
+      textno_num %>% sort(), collapse =splitinto_outputchar
+    ), 
+    id_onlydecimal_convert_I_1 = paste(
+      textno_num_convert_I_1 %>% sort(), collapse =splitinto_outputchar
     )
   ) %>% 
   ungroup()   %>% 
@@ -233,7 +263,10 @@ funcsplit_splitinto <- function(splintinto_df , splitinto_colname = "text1", spl
 
 # this takes text and separates this into two columns based on . or , ; eg .PB 
 arch_2000_dec_text  <- arch_2000_dec%>%
-  separate(text, into = c('text1', 'text2'), sep = "\\.|,", fill = "right", remove = FALSE)
+  separate(text, into = c('text1', 'text2'), sep = "\\.|,", fill = "right", remove = FALSE) %>% 
+  mutate(
+    text2 = stringi_str_order( text2)
+  )
 
 # this then filters down to only those where text2 delim column matches those in the pattern (Eg .pb, .s, etc); 
 # the last filter step makes sure that the pattern terminates text2
@@ -244,7 +277,8 @@ arch_2000_dec_positions<- arch_2000_dec_text %>%
   # ) %>% 
   filter(
    text2 %in% c(funcsplit_pattern$combination), 
-   nchar(text1)>=2
+   nchar(text1)>=2, 
+   rownum == 7720
   ) %>% 
   mutate(
     rownum2 = row_number(),
@@ -314,6 +348,7 @@ arch_2000_dec_positions<- arch_2000_dec_text %>%
  # this uses  the function that takes what we belive is the id column; and returns a standardized id format eg M-342/P-234 (ie id_no)
 
  arch_2000_dec_positions_idsplitLU <- arch_2000_dec_positions%>% 
+   # filter()
   funcsplit_splitinto(
     splintinto_df = ., 
     splitinto_colname = "text1", 
@@ -332,9 +367,12 @@ arch_2000_dec_text_begin <- arch_2000_dec_text %>%
     arch_2000_dec_positions_idsplitLU %>% 
       rename(
         id = id_no, 
-        type = text2
+        type = text2, 
+        id_numberonly = id_onlydecimal, 
+        id_origtext_id1 = id_origtext, 
+        id_numberonly_convertI_1 = id_onlydecimal_convert_I_1
       )  %>% 
-      select(rownum, id, id_origtext, type)  %>% 
+      select(rownum, id, id_origtext_id1, type, id_numberonly, id_numberonly_convertI_1)  %>% 
       # mutate(
       #   rownum2 = row_number()
       # )
@@ -347,11 +385,15 @@ arch_2000_dec_text_begin <- arch_2000_dec_text %>%
   fill(
     id, .direction = "down"
   )%>% 
-  # fill(
-  #    rownum2, .direction = "down"
-  # )%>% 
     fill(
-     id_origtext, .direction = "down"
+    id_numberonly, .direction = "down"
+  )%>% 
+
+  fill(
+     id_numberonly_convertI_1, .direction = "down"
+  )%>%
+    fill(
+     id_origtext_id1, .direction = "down"
   )%>% 
 
   fill(
@@ -382,9 +424,11 @@ arch_2000_dec_text_begin_id2LU_LU <- arch_2000_dec_text_begin %>%
     arch_2000_dec_text_begin_id2LU %>% 
       rename(
         id_bottom = id_no, 
-        id_bottomorigtext = id_origtext
+        id_bottomorigtext = id_origtext ,
+        id_bottom_onlydecimal = id_onlydecimal, 
+        id_bottom_onlydecimal_convert_I_1 = id_onlydecimal_convert_I_1
       )  %>% 
-      select(rownum, id_bottom, id_bottomorigtext)  %>% 
+      select(rownum, id_bottom, id_bottomorigtext, id_bottom_onlydecimal, id_bottom_onlydecimal_convert_I_1)  %>% 
       # mutate(
       #   rownum2 = row_number()
       # )
@@ -392,13 +436,14 @@ arch_2000_dec_text_begin_id2LU_LU <- arch_2000_dec_text_begin %>%
     by = c("rownum")
   ) %>% 
   filter(
-    id_bottom == id
+    # this allows the standardized id match; or numeric id match in same row
+    (id_bottom == id)|(id_numberonly==id_bottom_onlydecimal)|(id_numberonly_convertI_1== id_bottom_onlydecimal_convert_I_1)
   )
  arch_2000_dec_text_begin_id <- arch_2000_dec_text_begin %>% 
    left_join(
      arch_2000_dec_text_begin_id2LU_LU %>% 
        select(
-        rownum, id_bottom, id_bottomorigtext
+        rownum, id_bottom, id_bottomorigtext, id_bottom_onlydecimal, id_bottom_onlydecimal_convert_I_1
        ) %>% 
        distinct(),
      by= c("rownum")
@@ -406,21 +451,32 @@ arch_2000_dec_text_begin_id2LU_LU <- arch_2000_dec_text_begin %>%
    group_by(
      id
    ) %>% 
-    fill(
-     id_origtext, .direction = "down"
-  )%>% 
+  #   fill(
+  #    id_bottomorigtext, .direction = "down"
+  # )%>% 
     fill(
      id_bottom, .direction = "up"
   )%>% 
     fill(
      id_bottomorigtext, .direction = "up"
   ) %>% 
+  fill(
+     id_bottom_onlydecimal, .direction = "up"
+  )%>% 
+  fill(
+     id_bottom_onlydecimal_convert_I_1, .direction = "up"
+  )%>% 
+
    ungroup()
  # ones that don't have accompanying bottom
  # 7238 rownum 
 # 12PA/P834 row7298 (both 7298 and 7238 should include an M in first P if there are two Ps)
  # 7465 # BM-21/P-748 21B/P748,PY; end is 0002 IB  M/00748  P (bc i gets coded as 1)
  # at end of day, just want 
+ 
+ ### 7/23;
+ # # problem with row 7720	
+# 850/P17775.SPBEIY 
  arch_2000_dec_text_begin_id %>% 
    filter(
      is.na(( id_bottomorigtext))
