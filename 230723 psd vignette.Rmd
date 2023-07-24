@@ -190,9 +190,12 @@ funcsplit_splitinto <- function(splintinto_df , splitinto_colname = "text1", spl
           "[^[:digit:]]", 
           "",
           gsub(
+          "I", "1",
+          gsub(
           "I", "1",value
           ) , perl = TRUE
-        ) %>% as.numeric() ,
+        )
+        )%>% as.numeric() ,
       textno_letter_concM = 
         case_when(
           # when current obs is not m and there is no other m, prefix M
