@@ -58,6 +58,11 @@ stringi_str_order <- function(y) {
 ```
 
 ```{r }
+
+save.image("journal/230723_save image.RData")
+```
+
+```{r }
 fsis_init_LU <- readxl::read_excel(
   "230630_fsis_initialLU.xlsx"
 )
@@ -143,7 +148,7 @@ funcsplit_splitinto <- function(splintinto_df , splitinto_colname = "text1", spl
 # rm(splintinto_char)
 # rm(splitinto_colname)
 # rm(splintinto_df)
-
+require(splitstackshape)
   splitinto_dfLU <- splintinto_df %>% 
     cSplit(., splitCols =splitinto_colname, splintinto_char, drop = FALSE) %>% 
   mutate(
@@ -199,7 +204,7 @@ funcsplit_splitinto <- function(splintinto_df , splitinto_colname = "text1", spl
           "[^[:digit:]]", 
           "",
           gsub(
-          "O", "I",
+          "O", "0",
           gsub(
           "I", "1",value
           ) , perl = TRUE
@@ -522,10 +527,10 @@ arch_2000_dec_text_begin_id2LU_LU_bottomtop_numberonly_I_1 <- arch_2000_dec_text
     (id_numberonly_convertI_1== id_bottom_onlydecimal_convert_I_1)
     )%>% 
   mutate(
-    matchtype = "bottom_top_numbermatch"
+    matchtype = "bottom_top_numbermatch_convert_I_1"
   )
 
-# 4   Unsure top and bottom  - just convert to id matches
+# 4   This is simply those rows that aRE the ID (that are not bottom)
 ## need to filter out bottoms? and tops?
 # number only for top == bottom
 arch_2000_dec_text_begin_id2LU_LU_other_idonly <- arch_2000_dec_text_begin_id2LU_LU %>% 
@@ -533,20 +538,19 @@ arch_2000_dec_text_begin_id2LU_LU_other_idonly <- arch_2000_dec_text_begin_id2LU
      !rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop$rownum),
     !rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop_numberonly$rownum),
      !rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop_numberonly_I_1$rownum),
-   
    id ==text_idno
   )
 
 
 # number only for top == bottom
-arch_2000_dec_text_begin_id2LU_LU_other_idonly <- arch_2000_dec_text_begin_id2LU_LU %>% 
-  filter(
-     !rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop$rownum),
-    !rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop_numberonly$rownum),
-     !rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop_numberonly_I_1$rownum),
-   
-  (text_onlydecimal ==id_bottom_onlydecimal )|(text_onlydecimal == id_bottom_onlydecimal_convert_I_1 )
-  )
+# arch_2000_dec_text_begin_id2LU_LU_other_idonly <- arch_2000_dec_text_begin_id2LU_LU %>% 
+#   filter(
+#      !rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop$rownum),
+#     !rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop_numberonly$rownum),
+#      !rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop_numberonly_I_1$rownum),
+#    
+#   (text_onlydecimal ==id_bottom_onlydecimal )|(text_onlydecimal == id_bottom_onlydecimal_convert_I_1 )
+#   )
 
  arch_2000_dec_text_begin_id <- arch_2000_dec_text_begin %>% 
    left_join(
