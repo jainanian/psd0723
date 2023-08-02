@@ -65,7 +65,19 @@ save.image("journal/230723_save image.RData")
 ```{r }
 fsis_init_LU <- readxl::read_excel(
   "230630_fsis_initialLU.xlsx"
-)
+) %>% 
+  bind_rows(
+    tibble(
+      Initial = "1", 
+      Long = "Inspection"
+    )
+  )%>% 
+  bind_rows(
+    tibble(
+      Initial = "!", 
+      Long = "Inspection"
+    )
+  )
 
 fsis_init_LU_combo <- crossing(
   combination = unlist(lapply(1:nrow(fsis_init_LU), function(n) combn(fsis_init_LU$Initial, n, paste, collapse=""))), 
@@ -121,10 +133,10 @@ funcsplit_pattern <- fsis_init_LU_combo
 funcsplit_readdoc <- function(x){
     require(splitstackshape)
   require(stringi)
-arch_2000_dec <- readr::read_tsv("https://archive.org/stream/CAT10193534071/CAT10193534071_djvu.txt", col_names = c("text")) %>% 
+dftext <- readr::read_tsv("https://archive.org/stream/CAT10193534071/CAT10193534071_djvu.txt", col_names = c("text")) %>% 
   mutate(
     rownum= row_number()
-  )
+  ) 
   
 
 }
@@ -132,13 +144,13 @@ arch_2000_dec <- readr::read_tsv("https://archive.org/stream/CAT10193534071/CAT1
 # the occurrence of ids is 1. decimal, typesplit letters; followed by 2. decimal , meat or poultry (M or P)
 funcsplit_splitinto <- function(splintinto_df , splitinto_colname = "text1", splintinto_char = "/", 
     splitinto_outputchar = "/"){
-  # arch_2000_dec_text_begin_idLU_onlynum
-  # splintinto_df <- arch_2000_dec_positions %>% 
+  # dftext_septext_notid1row
+  # splintinto_df <- dftext_onlyID1row %>% 
   #   filter(
   #     (rownum <= 7728), 
   #     rownum >= 7720
   #   )
-#   splintinto_df <- arch_2000_dec_text_begin_idLU_onlynum 
+#   splintinto_df <- dftext_septext_notid1row 
 # 
 # splitinto_colname = "text"
 # splintinto_char = "/"
@@ -279,7 +291,7 @@ require(splitstackshape)
 } 
 
 # this takes text and separates this into two columns based on . or , ; eg .PB 
-arch_2000_dec_text  <- arch_2000_dec%>%
+dftext_sep  <- dftext%>%
   separate(text, into = c('text1', 'text2'), sep = "\\.|,", fill = "right", remove = FALSE) %>% 
   mutate(
     text2 = gsub(" ", "", text2, perl = TRUE),
@@ -289,20 +301,27 @@ arch_2000_dec_text  <- arch_2000_dec%>%
 
 # this then filters down to only those where text2 delim column matches those in the pattern (Eg .pb, .s, etc); 
 # the last filter step makes sure that the pattern terminates text2
-arch_2000_dec_positions<- arch_2000_dec_text %>% 
+dftext_onlyID1row<- dftext_sep %>% 
+  inner_join(
+    funcsplit_pattern,# %>% 
+      # select(
+      #   finalpattern, combination
+      # ), 
+    by = c("text2" = "combination")
+  ) %>% 
   # mutate(
   #   GEOID = purrr::map(files,
   #                      ~readxl::read_excel(.x ))
   # ) %>% 
   filter(
        # rownum == 7643,
-   text2 %in% c(funcsplit_pattern$combination), 
+   # text2 %in% c(funcsplit_pattern$combination), 
    nchar(text1)>=2 #, 
    # rownum >= 7720
   ) %>% 
   mutate(
     rownum2 = row_number(),
-    rownum2_end = paste0(text2_keeporder, "$")
+    rownum2_end = paste0("\\", ending, text2_keeporder, "$")
   ) %>% 
   group_by(
     rownum2
@@ -315,7 +334,7 @@ arch_2000_dec_positions<- arch_2000_dec_text %>%
 
 
 # 
-# arch_2000_dec_positions_idsplit <- arch_2000_dec_positions_idsplitLU %>% 
+# arch_2000_dec_positions_idsplit <- dftext_onlyID1rowLU %>% 
 #   mutate(
 #     rownum2 = row_number(), 
 #     id = text1,
@@ -323,9 +342,9 @@ arch_2000_dec_positions<- arch_2000_dec_text %>%
 #     )# %>% 
 
 # 
-# arch_2000_dec_positions_idsplit <- #arch_2000_dec_positions %>% 
+# arch_2000_dec_positions_idsplit <- #dftext_onlyID1row %>% 
 #   #mutate(
-#        cSplit(arch_2000_dec_positions, splitCols ="text1", "/", drop = FALSE) %>% 
+#        cSplit(dftext_onlyID1row, splitCols ="text1", "/", drop = FALSE) %>% 
 #   mutate(
 #     rownum2 = row_number(), 
 #     id = text1,
@@ -335,9 +354,9 @@ arch_2000_dec_positions<- arch_2000_dec_text %>%
   # select(
   #   text:rownum
   # )
- # arch_2000_dec_positions_idsplitLU <- #arch_2000_dec_positions %>% 
+ # dftext_onlyID1rowLU <- #dftext_onlyID1row %>% 
  #  #mutate(
- #       cSplit(arch_2000_dec_text, splitCols ="text", "/", drop = FALSE) %>% 
+ #       cSplit(dftext_sep, splitCols ="text", "/", drop = FALSE) %>% 
  #  gather(
  #    key = textno, 
  #    value = value, 
@@ -367,26 +386,32 @@ arch_2000_dec_positions<- arch_2000_dec_text %>%
  
  # this uses  the function that takes what we belive is the id column; and returns a standardized id format eg M-342/P-234 (ie id_no)
 
- arch_2000_dec_positions_idsplitLU <- arch_2000_dec_positions%>% 
+ dftext_onlyID1rowLU <- dftext_onlyID1row%>% 
    # filter()
   funcsplit_splitinto(
     splintinto_df = ., 
     splitinto_colname = "text1", 
     splintinto_char = "/", 
     splitinto_outputchar = "/"
-    )
+    ) %>% 
+   mutate(
+     matchtype= "top_id1", 
+     id_bait = id_no, 
+     id = id_no
+   )
    
  # takes the text filters to start; joins to actutal id (id) 
  # and fills down
  # first top id
-arch_2000_dec_text_begin <- arch_2000_dec_text %>% 
+ # merely taks all text and joins to what I believe is ID
+dftext_sep_id1 <- dftext_sep %>% 
   filter(
-    rownum >= (arch_2000_dec_positions$rownum %>% min())
+    rownum >= (dftext_onlyID1row$rownum %>% min())
   ) %>% 
  left_join(
-    arch_2000_dec_positions_idsplitLU %>% 
+    dftext_onlyID1rowLU %>% 
       rename(
-        id = id_no, 
+        # id = id_no, 
         type = text2, 
         id_numberonly = id_onlydecimal, 
         id_origtext_id1 = id_origtext, 
@@ -424,17 +449,17 @@ arch_2000_dec_text_begin <- arch_2000_dec_text %>%
     firstchar_textcol = substr(text, 1, 1)
     )
 
-### this step produces one column with only numbers of ; meant to be a substitute for 
-arch_2000_dec_text_begin_idLU_onlynum <- arch_2000_dec_text_begin %>% 
+### this step produces one column based on the tex
+dftext_septext_notid1row <- dftext_sep_id1 %>% 
   # filter(
-  #   !rownum %in% c( arch_2000_dec_positions_idsplitLU$rownum),
-  #   rownum >=9218
+  #   !rownum %in% c( dftext_onlyID1rowLU$rownum)#,
+  #   # rownum >=9218
   # ) %>%
   mutate(
     textoriginal_onlynum = text
   ) %>% 
   select(
-  any_of(c(arch_2000_dec_text_begin %>% names(), "textoriginal_onlynum") )  
+  any_of(c(dftext_sep_id1 %>% names(), "textoriginal_onlynum") )  
   ) %>% 
     funcsplit_splitinto(
     splintinto_df = ., 
@@ -455,13 +480,13 @@ arch_2000_dec_text_begin_idLU_onlynum <- arch_2000_dec_text_begin %>%
       )
 
 
-# this next step will produce the bottom ids if present
-arch_2000_dec_text_begin_id2LU <- arch_2000_dec_text_begin %>% 
+##  this next step will produce the bottom ids if present
+dftext_sep_id1_bottomonly <- dftext_sep_id1 %>% 
   filter(
-    !rownum %in% c( arch_2000_dec_positions_idsplitLU$rownum) 
+    !rownum %in% c( dftext_onlyID1rowLU$rownum) 
   ) %>% 
   select(
-  any_of(c(arch_2000_dec_text_begin %>% names()) )  
+  any_of(c(dftext_sep_id1 %>% names()) )  
   ) %>% 
     funcsplit_splitinto(
     splintinto_df = ., 
@@ -473,9 +498,9 @@ arch_2000_dec_text_begin_id2LU <- arch_2000_dec_text_begin %>%
 # do this in two parts: ones where 
 
 ### join
-arch_2000_dec_text_begin_id2LU_LU <- arch_2000_dec_text_begin %>% 
+dftext_sep_id1_LU <- dftext_sep_id1 %>% 
   left_join(
-    arch_2000_dec_text_begin_id2LU %>% 
+    dftext_sep_id1_bottomonly %>% 
       rename(
         id_bottom = id_no, 
         id_bottomorigtext = id_origtext ,
@@ -491,70 +516,125 @@ arch_2000_dec_text_begin_id2LU_LU <- arch_2000_dec_text_begin %>%
     by = c("rownum")
   ) %>% 
   left_join(
-    arch_2000_dec_text_begin_idLU_onlynum, 
+    dftext_septext_notid1row, 
     by = c("rownum")
   )
 
 ##### 1  exact match
-arch_2000_dec_text_begin_id2LU_LU_bottomtop <- arch_2000_dec_text_begin_id2LU_LU %>% 
+dftext_sep_id1_LU_bottomtop <- dftext_sep_id1_LU %>% 
 
   filter(
     # this allows the standardized id match; or numeric id match in same row
     (id_bottom == id)
     ) %>% 
   mutate(
-    matchtype = "bottom_top_exactmatch"
+    matchtype = "bottom_top_exactmatch", 
+    id_bait = id_bottom
   )
 ##### 2 number only for top == bottom
-arch_2000_dec_text_begin_id2LU_LU_bottomtop_numberonly <- arch_2000_dec_text_begin_id2LU_LU %>% 
+dftext_sep_id1_LU_numberonly <- dftext_sep_id1_LU %>% 
 
   filter(
-    # this allows the standardized id match; or numeric id match in same row!rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop$rownum),
-     !rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop$rownum),
+    # this allows the standardized id match; or numeric id match in same row!rownum %in% c(dftext_sep_id1_LU_bottomtop$rownum),
+     !rownum %in% c(dftext_sep_id1_LU_bottomtop$rownum),
     (id_numberonly==id_bottom_onlydecimal)
     ) %>% 
   mutate(
-    matchtype = "bottom_top_numbermatch"
+    matchtype = "bottom_top_numbermatch", 
+    id_bait = id_numberonly
   )
 
 # 3 number only for top == bottom; convert I -> 1; O -> 0
-arch_2000_dec_text_begin_id2LU_LU_bottomtop_numberonly_I_1 <- arch_2000_dec_text_begin_id2LU_LU %>% 
+dftext_sep_id1_LU_numberonly_I_1 <- dftext_sep_id1_LU %>% 
 
   filter(
-    # this allows the standardized id match; or numeric id match in same row!rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop$rownum),
-     !rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop$rownum),
-     !rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop_numberonly$rownum),
+    # this allows the standardized id match; or numeric id match in same row!rownum %in% c(dftext_sep_id1_LU_bottomtop$rownum),
+     !rownum %in% c(dftext_sep_id1_LU_bottomtop$rownum),
+     !rownum %in% c(dftext_sep_id1_LU_numberonly$rownum),
     (id_numberonly_convertI_1== id_bottom_onlydecimal_convert_I_1)
     )%>% 
   mutate(
-    matchtype = "bottom_top_numbermatch_convert_I_1"
+    matchtype = "bottom_top_numbermatch_convert_I_1", 
+    id_bait = id_numberonly_convertI_1
   )
 
 # 4   This is simply those rows that aRE the ID (that are not bottom)
 ## need to filter out bottoms? and tops?
 # number only for top == bottom
-arch_2000_dec_text_begin_id2LU_LU_other_idonly <- arch_2000_dec_text_begin_id2LU_LU %>% 
+dftext_sep_id1_LU_otheridonly <- dftext_sep_id1_LU %>% 
   filter(
-     !rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop$rownum),
-    !rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop_numberonly$rownum),
-     !rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop_numberonly_I_1$rownum),
+     !rownum %in% c(dftext_sep_id1_LU_bottomtop$rownum),
+    !rownum %in% c(dftext_sep_id1_LU_numberonly$rownum),
+     !rownum %in% c(dftext_sep_id1_LU_numberonly_I_1$rownum),
    id ==text_idno
+  ) %>% 
+  mutate(
+    matchtype = "idtext_only", 
+    id_bait = text_idno
   )
 
+dftext_sep_id1_LU_combine <- bind_rows(
+  dftext_onlyID1rowLU,
+  dftext_sep_id1_LU_bottomtop, 
+  dftext_sep_id1_LU_numberonly, 
+  dftext_sep_id1_LU_numberonly_I_1, 
+  dftext_sep_id1_LU_otheridonly
+) %>% 
+  group_by(
+    rownum
+  ) %>% 
+  slice(1) %>% 
+  ungroup() 
+
+dftext_sep_id1_LU_withcombineID_substitute <- dftext_sep_id1_LU %>% 
+  filter(
+    !rownum %in% c(dftext_sep_id1_LU_combine$rownum), 
+    rownum <= dftext_sep_id1_LU_combine$rownum %>% max()
+  ) %>% 
+  # mutate(
+  #   text_idno_guess = text_idno
+  # ) %>% 
+  # gather(
+  #   key = texsplit, 
+  #   value = id_bait, 
+  #   text_onlydecimal:text_idno
+  # ) %>% 
+  filter(
+   ( !is.na(text_idno))|(!is.na(text_onlydecimal ))|(!is.na(text_onlydecimal_convert_I_1 )),
+   (text_idno %in% c(dftext_sep_id1_LU_combine$id_bait) )|(text_onlydecimal %in% c(dftext_sep_id1_LU_combine$id_bait) )|(text_onlydecimal_convert_I_1 %in% c(dftext_sep_id1_LU_combine$id_bait) )
+  )  
+  # inner_join(
+  #   dftext_sep_id1_LU_combine %>% 
+  #     select(
+  #       rownum, matchtype, id_bait
+  #     ) %>% 
+  #     distinct(), 
+  #   by = c("id_bait" = "id_bait" )
+  # )
+
+dftext_sep_id1_LU_withcombineID <- dftext_sep_id1_LU %>% 
+  left_join(
+    dftext_sep_id1_LU_combine %>% 
+      select(
+        rownum, matchtype, id_bait
+      ) %>% 
+      distinct(), 
+    by = c("rownum")
+  )
 
 # number only for top == bottom
-# arch_2000_dec_text_begin_id2LU_LU_other_idonly <- arch_2000_dec_text_begin_id2LU_LU %>% 
+# dftext_sep_id1_LU_otheridonly <- dftext_sep_id1_LU %>% 
 #   filter(
-#      !rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop$rownum),
-#     !rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop_numberonly$rownum),
-#      !rownum %in% c(arch_2000_dec_text_begin_id2LU_LU_bottomtop_numberonly_I_1$rownum),
+#      !rownum %in% c(dftext_sep_id1_LU_bottomtop$rownum),
+#     !rownum %in% c(dftext_sep_id1_LU_numberonly$rownum),
+#      !rownum %in% c(dftext_sep_id1_LU_numberonly_I_1$rownum),
 #    
 #   (text_onlydecimal ==id_bottom_onlydecimal )|(text_onlydecimal == id_bottom_onlydecimal_convert_I_1 )
 #   )
 
- arch_2000_dec_text_begin_id <- arch_2000_dec_text_begin %>% 
+ arch_2000_dec_text_begin_id <- dftext_sep_id1 %>% 
    left_join(
-     arch_2000_dec_text_begin_id2LU_LU %>% 
+     dftext_sep_id1_LU %>% 
        select(
         rownum, id_bottom, id_bottomorigtext, id_bottom_onlydecimal, id_bottom_onlydecimal_convert_I_1,text_onlydecimal
        ) %>% 
@@ -598,7 +678,7 @@ arch_2000_dec_text_begin_id2LU_LU_other_idonly <- arch_2000_dec_text_begin_id2LU
    ) %>% 
    View()
 # 
-#    arch_2000_dec_text_begin%>% 
+#    dftext_sep_id1%>% 
 #     filter(
 #         id == "00226  M/04863"
 #     ) %>% View()
@@ -656,7 +736,7 @@ arch_2000_dec_text_begin_firmLU <- arch_2000_dec_text_begin_id %>%
     rownum_firmLU,  .direction = "down"
   ) 
 
-arch_2000_dec_text_begin_firm <- arch_2000_dec_text_begin %>% 
+arch_2000_dec_text_begin_firm <- dftext_sep_id1 %>% 
   left_join(
     arch_2000_dec_text_begin_firmLU, 
     by = c("id", "rownum2")
