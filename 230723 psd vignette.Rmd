@@ -115,6 +115,14 @@ require(splitstackshape)
   
   data(fips_code)
 funcsplit_pattern <- fsis_init_LU_combo
+funcsplit_pattern_maxnum = (funcsplit_pattern %>% 
+  mutate(
+    ncharcombo = nchar(combination) 
+  ) %>% 
+  filter(
+   ncharcombo == max(ncharcombo)
+  ))$combination[1]%>% char_unique() %>% nchar()
+
 
 # fsis_init_LU_combo_patterns <- funcsplit_pattern %>% 
 #   summarise(
@@ -161,6 +169,50 @@ funcsplit_splitinto <- function(splintinto_df , splitinto_colname = "text1", spl
 # rm(splitinto_colname)
 # rm(splintinto_df)
 require(splitstackshape)
+  
+  
+  
+  splitinto_pattern_MP <- "M[[:digit:]]+|[[:digit:]]+M|P[[:digit:]]+|[[:digit:]]+P"
+  
+    splitinto_pattern_MPtop  <- "[[:digit:]]+/P[[:digit:]]+|P[[:digit:]]+|M[[:digit:]]+|[[:digit:]]+$"
+
+      splitinto_pattern_MPbottom <- "[[:digit:]]+M|[[:digit:]]+P"
+
+        splitinto_pattern_coLTDinc <- "INC|CO|LTD"
+
+      
+      
+      library(inline)
+
+.char_unique_code <- "
+std::vector < std::string > s = as< std::vector < std::string > >(x);
+unsigned int input_size = s.size();
+
+std::vector < std::string > chrs(input_size);
+
+for (unsigned int i=0; i<input_size; i++) {
+
+  std::string t = s[i];
+
+  for (std::string::iterator chr=t.begin();
+       chr != t.end(); ++chr) {
+
+    if (chrs[i].find(*chr) == std::string::npos) {
+      chrs[i] += *chr;
+    }
+
+  }
+
+}
+return(wrap(chrs));
+"
+
+char_unique <- 
+  rcpp(sig=signature(x="std::vector < std::string >"),
+       body=.char_unique_code,
+       includes=c("#include <string>",
+                 "#include <iostream>"))
+      
   splitinto_dfLU <- splintinto_df %>% 
     cSplit(., splitCols =splitinto_colname, splintinto_char, drop = FALSE) %>% 
   mutate(
@@ -307,7 +359,7 @@ dftext_sep  <- dftext%>%
 
 # this then filters down to only those where text2 delim column matches those in the pattern (Eg .pb, .s, etc); 
 # the last filter step makes sure that the pattern terminates text2
-dftext_onlyID1row<- dftext_sep %>% 
+dftext_onlyID1row<- dftext_sep%>% 
   inner_join(
     funcsplit_pattern,# %>% 
       # select(
@@ -336,7 +388,173 @@ dftext_onlyID1row<- dftext_sep %>%
   filter(
     grepl(rownum2_end, text_rmspace)
   ) %>% 
-  ungroup() 
+  ungroup() %>% 
+  filter(
+    !grepl(splitinto_pattern_coLTDinc , text, perl = TRUE, ignore.case = TRUE )
+  )
+
+dftext_sep_not_prefix <- dftext_sep%>% 
+  filter(
+    !rownum %in% c(dftext_onlyID1row$rownum )
+  )  %>% 
+  filter(
+    !grepl(splitinto_pattern_coLTDinc , text, perl = TRUE, ignore.case = TRUE )
+  )%>% 
+  mutate(
+    text1_reducespace = gsub("  ", " ", text1, perl = TRUE), 
+    text1_nospace = gsub(" ", "", text1, perl = TRUE) 
+  )
+
+funcsplit_function_filter_forpattern <- function(x, x_filterchar, x_num_tofilter = 3){
+
+ x <- dftext_sep_not_prefix
+ x_filterchar = splitinto_pattern_MPbottom
+   x_num_tofilter = 3 
+x_out <- x%>% 
+  group_by(
+    rownum
+  ) %>%
+  mutate(
+    text1_bottom = 
+      paste(
+        str_extract_all(
+        pattern = x_filterchar , 
+        text1_nospace
+      ) %>% unlist(), 
+      collapse = "|"
+      )
+    )%>%
+  ungroup() %>% 
+  filter(
+    nchar(text1_bottom ) >=2,
+    !is.na(text1_bottom ), text1_bottom != "NA"
+  ) %>% 
+  mutate(
+    text1_bottom_filter =
+      str_remove_all(
+        string = text1_nospace, 
+        pattern = text1_bottom
+      ), 
+ text1_bottom_countdistinct = 
+         nchar(char_unique(text1_bottom_filter)), 
+ text2_countdistinct = nchar(text2) 
+
+)%>% 
+  filter(
+    text1_bottom_countdistinct <= x_num_tofilter, 
+    ((text2_countdistinct <= funcsplit_pattern_maxnum)|
+      is.na( text2))
+  )
+x_out  %>% 
+    filter(
+        grepl("04247", text, perl = TRUE)
+    ) %>% 
+  View()
+x_out
+}
+
+
+dftext_sep_not_prefix_bottom <- dftext_sep_not_prefix %>% 
+  funcsplit_function_filter_forpattern(x = ., x_filterchar =splitinto_pattern_MPbottom , x_num_tofilter = 3)
+dftext_sep_not_prefix %>% 
+  filter(
+    grepl("04247", text, perl = TRUE)
+  ) %>% 
+  View()
+
+dftext_onlyID1row_notprefixtop <-   dftext_sep_not_prefix  %>% 
+  filter(
+    !rownum %in% c(dftext_sep_not_prefix_bottom$rownum )
+  )%>% 
+  funcsplit_function_filter_forpattern(x = ., x_filterchar =splitinto_pattern_MPtop , x_num_tofilter = 3)
+
+dftext_sep_keeprows <- dftext_onlyID1row %>% 
+  bind_rows(
+    dftext_sep %>% 
+      filter(
+    rownum %in% c( 
+      dftext_sep_not_prefix_bottom$rownum, 
+      dftext_onlyID1row_notprefixtop$rownum
+      )
+  )
+  ) %>% 
+  arrange(
+    rownum
+  )
+  
+
+ 
+  group_by(
+    rownum
+  ) %>%
+  mutate(
+    text1_top = 
+      paste(
+        str_extract_all(
+        pattern = splitinto_pattern_MPtop , 
+        text1_nospace
+      ) %>% unlist(), 
+      collapse = "|"
+      )
+    )%>%
+  ungroup() %>% 
+  mutate(
+    text1_includesPM = 
+      paste(
+        str_extract_all(
+        pattern = splitinto_pattern_MPtop , 
+        text1_nospace
+      ) %>% unlist(), 
+      collapse = "|"
+      )
+    ) %>%
+  ungroup() %>% 
+  mutate( 
+    text1_countid = 
+      case_when(
+        (nchar( text1_includesPM) >=2) & 
+          (str_count(text1_includesPM , pattern = "\\|") ==0) ~ 1, 
+        (nchar( text1_includesPM) >=2) & 
+          (str_count(text1_includesPM , pattern = "\\|") >=1)~ 2,
+        TRUE ~ 0
+      ),
+    text1_removePM = 
+      case_when(
+        nchar( text1_includesPM) >=2 ~ 
+          
+          str_remove_all(
+            string = text1_nospace, 
+            pattern = text1_includesPM
+          ) 
+        
+      ), 
+    
+    numspaces = length(strsplit( text1_reducespace, " ")[[1]]),
+    numslash = length(strsplit( text1_reducespace, "/")[[1]]),
+
+    keepthis = 
+      case_when(
+        # if there is a slash in text1 and matches pattern topid, keep
+        (numslash >=1)&
+          ( nchar( text1_includesPM) >=2 )&
+          (!(nchar(text1_removePM)>=4))~"Y", 
+        
+        #if there are more than 2 spaces and number of slashes is not > 2, then no ()
+        (numspaces >= 2)&(!( numslash >= 2) ) ~ "N", 
+        grepl("(MAIL)", text1_reducespace, perl = TRUE, ignore.case = TRUE) ~ "N", 
+        # if it's a page number, don't keep it,  just to be safe
+         as.numeric( text_reducespace) >= 1 ~ "N",
+        # nchar( gsub("[^pPmM]", "", text_reducespace  ))   ~ "Y"  ,
+        
+        # (grepl( "M[[:digit:]]|[[:digit:]]M|P[[:digit:]]|[[:digit:]]P" ,text_nospace, perl = TRUE, ignore.case = TRUE)) ~  "Y",
+       # (lag(text_idno ) == text_idno )| (lead(text_idno) == text_idno) ~ "Y",
+
+        TRUE ~ "N"
+      )
+    
+  )  
+
+
 # dftext_sep %>%
 #   filter(
 #     (rownum  ==  12788 )|(rownum == 8478)
@@ -690,7 +908,21 @@ dftext_sep_id1_LU_incombinebait <-dftext_sep_id1_LU %>%
   mutate(
     text_reducespace = gsub("  ", " ", text), 
     text_nospace = gsub(" ", "", text) , 
-    text_removePM = gsub("[^0-9MmPp]", "\\1", gsub(" ", "", text1)  ) , 
+    text_includesPM =       
+      str_extract(
+        pattern = "M[[:digit:]]+|[[:digit:]]+M|P[[:digit:]]+|[[:digit:]]+P",  text_nospace
+      ), 
+    text_extractPM = 
+      case_when(
+        nchar( text_includesPM) >=2 ~ 
+          
+          str_remove_all(
+            string = text_nospace, 
+            pattern = "M[[:digit:]]+|[[:digit:]]+M|P[[:digit:]]+|[[:digit:]]+P" 
+          ) 
+        
+      ), 
+    
     numspaces = length(strsplit( text_reducespace, " ")[[1]]),
     numslash = length(strsplit( text_reducespace, "/")[[1]]),
 
@@ -701,6 +933,7 @@ dftext_sep_id1_LU_incombinebait <-dftext_sep_id1_LU %>%
         grepl("/", text_reducespace, perl = TRUE,  ) ~"Y", 
         (numspaces >= 2)&(!( numslash >= 2) ) ~ "N", 
         grepl("(MAIL)", text_reducespace, perl = TRUE, ignore.case = TRUE) ~ "N", 
+        # if it's a page number
          as.numeric( text_reducespace) >= 1 ~ "N",
         # nchar( gsub("[^pPmM]", "", text_reducespace  ))   ~ "Y"  , 
         (grepl( "M[[:digit:]]|[[:digit:]]M|P[[:digit:]]|[[:digit:]]P" ,text_nospace, perl = TRUE, ignore.case = TRUE)) ~  "Y",
