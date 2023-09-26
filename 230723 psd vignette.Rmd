@@ -223,17 +223,10 @@ funcsplit_splitinto <- function(splintinto_df , splitinto_colname = "text1", spl
   
   
   
-  splitinto_pattern_MP <- "M[[:digit:]]+|[[:digit:]]+M|P[[:digit:]]+|[[:digit:]]+P"
-  
-    splitinto_pattern_MPtop  <- "[[:digit:]]+/P[[:digit:]]+|P[[:digit:]]+|M[[:digit:]]+|[[:digit:]]+$"
-
-      splitinto_pattern_MPbottom <- "[[:digit:]]+M|[[:digit:]]+P"
-
-        splitinto_pattern_coLTDinc <- "INC|CO|LTD"
 
       
       
-      library(inline)
+      require(inline)
 
 .char_unique_code <- "
 std::vector < std::string > s = as< std::vector < std::string > >(x);
@@ -408,7 +401,26 @@ require(splitstackshape)
   require(tidycensus)
  library(inline)
   
+  
+  
+  
   data(fips_code)
+  
+  ### first M+ (M203), 
+  
+    splitinto_pattern_MP <- "M[[:digit:]]+|[[:digit:]]+M|P[[:digit:]]+|[[:digit:]]+P"
+   ### first digit alpha / P digit,  eg 3CB/P6139.PB 
+    ### second digit followed by P digit , eg 3CB/P6139
+    ### third P followed by digit,eg  3JC/P3JC,P  
+    ### fourth digit followed by alpha, eg 4C/P5
+    splitinto_pattern_MPtop  <-  "[[:digit:]]+[[:alpha:]]+/P[[:digit:]]+|[[:digit:]]+/P[[:digit:]]+|P[[:digit:]]+|[[:digit:]]+$|[[:digit:]]+[[:alpha:]]+$"
+
+    # this will capture something like 00003CAM/00003CAP in which there is number, alpha, M or number, alpha, P
+      splitinto_pattern_MPbottom <- "[[:digit:]]+[[:alpha:]]+M|[[:digit:]]+[[:alpha:]]+P|[[:digit:]]+M|[[:digit:]]+P"
+
+        splitinto_pattern_coLTDinc <- "INC|CO|LTD"
+
+  
 funcsplit_pattern <- fsis_init_LU_combo
 funcsplit_pattern_maxnum = (funcsplit_pattern %>% 
   mutate(
@@ -435,6 +447,12 @@ funcsplit_pattern_maxnum = (funcsplit_pattern %>%
 
 # this takes text and separates this into two columns based on . or , ; eg .PB 
 dftext_sep  <- dftext%>%
+  mutate(
+    textnum = as.numeric(str_squish(text))
+  ) %>% 
+  filter(
+    is.na(textnum) 
+  )%>% 
   separate(text, into = c('text1', 'text2'), sep = "\\.|,", fill = "right", remove = FALSE) %>% 
   mutate(
     text2 = gsub(" ", "", text2, perl = TRUE),
