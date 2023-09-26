@@ -103,40 +103,10 @@ fsis_init_LU_combo <- crossing(
   
 ```
 
-## function to split pdfs
-```{R }
+## aux functions
 
-func_to_split_by_init <- function(funcsplit_df,  funcsplit_pattern )
-{
-require(data.table)
-require(tm)
-require(splitstackshape)
-  require(tidycensus)
-  
-  data(fips_code)
-funcsplit_pattern <- fsis_init_LU_combo
-funcsplit_pattern_maxnum = (funcsplit_pattern %>% 
-  mutate(
-    ncharcombo = nchar(combination) 
-  ) %>% 
-  filter(
-   ncharcombo == max(ncharcombo)
-  ))$combination[1]%>% char_unique() %>% nchar()
-
-
-# fsis_init_LU_combo_patterns <- funcsplit_pattern %>% 
-#   summarise(
-#     patternfinal = paste(
-#       finalpattern %>% unique(), collapse = "|"
-#     )
-#   ) %>% 
-#   ungroup()
-
-# funcfind_pattern <- function(y){
-#   
-#   
-# }
-
+### function  reads the url text
+```{r }
 # this func reads the url text
 funcsplit_readdoc <- function(x){
     require(splitstackshape)
@@ -148,6 +118,88 @@ dftext <- readr::read_tsv("https://archive.org/stream/CAT10193534071/CAT10193534
   
 
 }
+
+
+```
+
+### function filter for pattern
+```{r }
+
+### basically this will try to find the instances of TEXT THAT CONTAINS patterns xfilterchar; and will filter for those in which the number <= numtofilter of extra distinct characters besides the patterns that 
+funcsplit_function_filter_forpattern <- function(x, x_filterchar, x_num_tofilter = 3){
+# 
+ x <- dftext_sep_not_prefix
+ x_filterchar = splitinto_pattern_MPbottom
+   x_num_tofilter = 3
+x_out <- x%>% 
+  group_by(
+    rownum
+  ) %>%
+  mutate(
+    text1_bottom = 
+      paste(
+        str_extract_all(
+        pattern = x_filterchar , 
+        text1_nospace
+      ) %>% unlist(), 
+      collapse = "|"
+      )
+    )%>%
+  ungroup()  
+
+x_out2 <- x_out%>% 
+  filter(
+    nchar(text1_bottom ) >=2,
+    !is.na(text1_bottom ), text1_bottom != "NA"
+  ) %>% 
+  mutate(
+    text1_bottom_filter =
+      str_remove_all(
+        string = text1_nospace, 
+        pattern = text1_bottom
+      ), 
+ text1_bottom_countdistinct = 
+          nchar(char_unique(text1_bottom_filter)) , 
+ text2_countdistinct = nchar(text2) 
+
+)%>% 
+  filter(
+    text1_bottom_countdistinct <= x_num_tofilter, 
+    ((text2_countdistinct <= funcsplit_pattern_maxnum)|
+      is.na( text2))
+  )
+x_out  %>%
+    filter(
+        grepl("04247", text, perl = TRUE)
+    ) %>%
+  View()
+
+x_out2  %>%
+    filter(
+        grepl("04247", text, perl = TRUE)
+    ) %>%
+  View()
+x_out2
+}
+
+```
+
+### function - char unique
+```{r }
+require(splitstackshape)
+require(inline)
+char_unique <- 
+  rcpp(sig=signature(x="std::vector < std::string >"),
+       body=.char_unique_code,
+       includes=c("#include <string>",
+                 "#include <iostream>"))
+
+
+```
+
+### function funcsplit_splitinto
+
+```{r }
 # this func takes a df, splits a colname (splitcol = provided name of column, eg text1, and reformats the text into )
 # the occurrence of ids is 1. decimal, typesplit letters; followed by 2. decimal , meat or poultry (M or P)
 funcsplit_splitinto <- function(splintinto_df , splitinto_colname = "text1", splintinto_char = "/", 
@@ -168,7 +220,6 @@ funcsplit_splitinto <- function(splintinto_df , splitinto_colname = "text1", spl
 # rm(splintinto_char)
 # rm(splitinto_colname)
 # rm(splintinto_df)
-require(splitstackshape)
   
   
   
@@ -207,11 +258,6 @@ for (unsigned int i=0; i<input_size; i++) {
 return(wrap(chrs));
 "
 
-char_unique <- 
-  rcpp(sig=signature(x="std::vector < std::string >"),
-       body=.char_unique_code,
-       includes=c("#include <string>",
-                 "#include <iostream>"))
       
   splitinto_dfLU <- splintinto_df %>% 
     cSplit(., splitCols =splitinto_colname, splintinto_char, drop = FALSE) %>% 
@@ -348,6 +394,45 @@ char_unique <-
   
 } 
 
+
+```
+
+## actual function to split pdfs
+```{R }
+
+func_to_split_by_init <- function(funcsplit_df,  funcsplit_pattern )
+{
+require(data.table)
+require(tm)
+require(splitstackshape)
+  require(tidycensus)
+ library(inline)
+  
+  data(fips_code)
+funcsplit_pattern <- fsis_init_LU_combo
+funcsplit_pattern_maxnum = (funcsplit_pattern %>% 
+  mutate(
+    ncharcombo = nchar(combination) 
+  ) %>% 
+  filter(
+   ncharcombo == max(ncharcombo)
+  ))$combination[1]%>% char_unique() %>% nchar()
+
+
+# fsis_init_LU_combo_patterns <- funcsplit_pattern %>% 
+#   summarise(
+#     patternfinal = paste(
+#       finalpattern %>% unique(), collapse = "|"
+#     )
+#   ) %>% 
+#   ungroup()
+
+# funcfind_pattern <- function(y){
+#   
+#   
+# }
+
+
 # this takes text and separates this into two columns based on . or , ; eg .PB 
 dftext_sep  <- dftext%>%
   separate(text, into = c('text1', 'text2'), sep = "\\.|,", fill = "right", remove = FALSE) %>% 
@@ -405,58 +490,17 @@ dftext_sep_not_prefix <- dftext_sep%>%
     text1_nospace = gsub(" ", "", text1, perl = TRUE) 
   )
 
-funcsplit_function_filter_forpattern <- function(x, x_filterchar, x_num_tofilter = 3){
-
- x <- dftext_sep_not_prefix
- x_filterchar = splitinto_pattern_MPbottom
-   x_num_tofilter = 3 
-x_out <- x%>% 
-  group_by(
-    rownum
-  ) %>%
-  mutate(
-    text1_bottom = 
-      paste(
-        str_extract_all(
-        pattern = x_filterchar , 
-        text1_nospace
-      ) %>% unlist(), 
-      collapse = "|"
-      )
-    )%>%
-  ungroup() %>% 
-  filter(
-    nchar(text1_bottom ) >=2,
-    !is.na(text1_bottom ), text1_bottom != "NA"
-  ) %>% 
-  mutate(
-    text1_bottom_filter =
-      str_remove_all(
-        string = text1_nospace, 
-        pattern = text1_bottom
-      ), 
- text1_bottom_countdistinct = 
-         nchar(char_unique(text1_bottom_filter)), 
- text2_countdistinct = nchar(text2) 
-
-)%>% 
-  filter(
-    text1_bottom_countdistinct <= x_num_tofilter, 
-    ((text2_countdistinct <= funcsplit_pattern_maxnum)|
-      is.na( text2))
-  )
-x_out  %>% 
-    filter(
-        grepl("04247", text, perl = TRUE)
-    ) %>% 
-  View()
-x_out
-}
 
 
 dftext_sep_not_prefix_bottom <- dftext_sep_not_prefix %>% 
   funcsplit_function_filter_forpattern(x = ., x_filterchar =splitinto_pattern_MPbottom , x_num_tofilter = 3)
+# there was a 
 dftext_sep_not_prefix %>% 
+  filter(
+    grepl("04247", text, perl = TRUE)
+  ) %>% 
+  View()
+dftext_sep_not_prefix_bottom %>% 
   filter(
     grepl("04247", text, perl = TRUE)
   ) %>% 
