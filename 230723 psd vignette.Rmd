@@ -48,6 +48,8 @@ archives_df <- readxl::read_excel(
 ```
 
 ```{r }
+
+### orders strings based on alphabetical sort
 stringi_str_order <- function(y) {
   require(stringi)
 
@@ -126,11 +128,18 @@ dftext <- readr::read_tsv("https://archive.org/stream/CAT10193534071/CAT10193534
 ```{r }
 
 ### basically this will try to find the instances of TEXT THAT CONTAINS patterns xfilterchar; and will filter for those in which the number <= numtofilter of extra distinct characters besides the patterns that 
-funcsplit_function_filter_forpattern <- function(x, x_filterchar, x_num_tofilter = 3){
+funcsplit_function_filter_forpattern <- function(x, x_filterchar, x_char_to_filterfinal = c("", "/"), x_numtofilterby = 3){
 # 
+  ### troubleshooting
  x <- dftext_sep_not_prefix
- x_filterchar = splitinto_pattern_MPbottom
+ # x_filterchar = splitinto_pattern_MPbottom
+  x_filterchar = splitinto_pattern_MPtop
+
    x_num_tofilter = 3
+   ### end troubleshooting comment out
+
+# this takes input df and tries to find pattern xfilterchar in the text without spaces; and puts all occurrences of the pattern in a string called text1bottom
+
 x_out <- x%>% 
   group_by(
     rownum
@@ -146,39 +155,45 @@ x_out <- x%>%
       )
     )%>%
   ungroup()  
-
+# this takes the above df and filters for those in which there is a occurrence of pattern  
 x_out2 <- x_out%>% 
   filter(
     nchar(text1_bottom ) >=2,
     !is.na(text1_bottom ), text1_bottom != "NA"
   ) %>% 
   mutate(
+    #and removes all occurrences of the pattern. 
     text1_bottom_filter =
       str_remove_all(
         string = text1_nospace, 
         pattern = text1_bottom
       ), 
+    # If there is lingering text, finds the number of unique chars in lingering text; if text is identical to pattern and has no lingering text ie text is "" will still capture this as 0
  text1_bottom_countdistinct = 
-          nchar(char_unique(text1_bottom_filter)) , 
- text2_countdistinct = nchar(text2) 
+          nchar(char_unique(text1_bottom_filter)) ,
+ text1_bottom_countdistinct_nopattern = 
+  nchar(char_unique(gsub("[[:digit:]]+|M|P", "", text1_bottom  )))
+ # text2_countdistinct = nchar(text2) 
 
 )%>% 
+  # filters those in which the num of distinct chars remaining is found in passed char vector x_char_to_filterfinal (usu "" or "/")
   filter(
-    text1_bottom_countdistinct <= x_num_tofilter, 
-    ((text2_countdistinct <= funcsplit_pattern_maxnum)|
-      is.na( text2))
+    text1_bottom_filter %in% c(x_char_to_filterfinal),
+    text1_bottom_countdistinct_nopattern <= x_numtofilterby #,
+    # ((text2_countdistinct <= funcsplit_pattern_maxnum)|
+    #   is.na( text2))
   )
-x_out  %>%
-    filter(
-        grepl("04247", text, perl = TRUE)
-    ) %>%
-  View()
-
-x_out2  %>%
-    filter(
-        grepl("04247", text, perl = TRUE)
-    ) %>%
-  View()
+# x_out  %>%
+#     filter(
+#         grepl("04247", text, perl = TRUE)
+#     ) %>%
+#   View()
+# 
+# x_out2  %>%
+#     filter(
+#         grepl("04247", text, perl = TRUE)
+#     ) %>%
+#   View()
 x_out2
 }
 
@@ -400,7 +415,7 @@ require(tm)
 require(splitstackshape)
   require(tidycensus)
  library(inline)
-  
+  require(stringr)
   
   
   
@@ -420,8 +435,9 @@ require(splitstackshape)
 
         splitinto_pattern_coLTDinc <- "INC|CO|LTD"
 
-  
+# this is a df containing the pattern of typically the first occurrence of ID , eg. P34, PB, 
 funcsplit_pattern <- fsis_init_LU_combo
+## and will find the length of the longest pattern
 funcsplit_pattern_maxnum = (funcsplit_pattern %>% 
   mutate(
     ncharcombo = nchar(combination) 
@@ -445,7 +461,8 @@ funcsplit_pattern_maxnum = (funcsplit_pattern %>%
 # }
 
 
-# this takes text and separates this into two columns based on . or , ; eg .PB 
+# this takes text and separates this into two columns using comma or period as delimitor, ie tries to put pattern , or . 
+
 dftext_sep  <- dftext%>%
   mutate(
     textnum = as.numeric(str_squish(text))
@@ -489,46 +506,52 @@ dftext_onlyID1row<- dftext_sep%>%
     rownum2
   ) %>% 
   filter(
+    # makes sure that 
     grepl(rownum2_end, text_rmspace)
   ) %>% 
   ungroup() %>% 
   filter(
+    # also makes sure that this filtered first id column does not have company name in it, eg inc co ltd - should just be id, pattern
     !grepl(splitinto_pattern_coLTDinc , text, perl = TRUE, ignore.case = TRUE )
   )
 
+# filter those that are not rownum captured above. In case that 
 dftext_sep_not_prefix <- dftext_sep%>% 
   filter(
     !rownum %in% c(dftext_onlyID1row$rownum )
   )  %>% 
   filter(
+    # makes sure doesnt contain company name pattern
     !grepl(splitinto_pattern_coLTDinc , text, perl = TRUE, ignore.case = TRUE )
   )%>% 
   mutate(
+    # then takes text and reduces or removes space
     text1_reducespace = gsub("  ", " ", text1, perl = TRUE), 
     text1_nospace = gsub(" ", "", text1, perl = TRUE) 
   )
 
 
-
+# this is easier to find bottom because contains M or P after digit, whereas top id sometimes only has number
 dftext_sep_not_prefix_bottom <- dftext_sep_not_prefix %>% 
-  funcsplit_function_filter_forpattern(x = ., x_filterchar =splitinto_pattern_MPbottom , x_num_tofilter = 3)
+  funcsplit_function_filter_forpattern(x = ., x_filterchar =splitinto_pattern_MPbottom , x_char_to_filterfinal = c("", "/"), x_numtofilterby = 3)
 # there was a 
 dftext_sep_not_prefix %>% 
   filter(
-    grepl("04247", text, perl = TRUE)
+    grepl("04247|00605", text, perl = TRUE)
   ) %>% 
   View()
 dftext_sep_not_prefix_bottom %>% 
   filter(
-    grepl("04247", text, perl = TRUE)
+    grepl("04247|00605", text, perl = TRUE)
   ) %>% 
   View()
 
+### should this be 
 dftext_onlyID1row_notprefixtop <-   dftext_sep_not_prefix  %>% 
   filter(
     !rownum %in% c(dftext_sep_not_prefix_bottom$rownum )
   )%>% 
-  funcsplit_function_filter_forpattern(x = ., x_filterchar =splitinto_pattern_MPtop , x_num_tofilter = 3)
+  funcsplit_function_filter_forpattern(x = ., x_filterchar =splitinto_pattern_MPtop , x_char_to_filterfinal = c("", "/"), x_numtofilterby = 3)
 
 dftext_sep_keeprows <- dftext_onlyID1row %>% 
   bind_rows(
