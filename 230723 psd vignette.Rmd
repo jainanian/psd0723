@@ -125,64 +125,136 @@ dftext <- readr::read_tsv("https://archive.org/stream/CAT10193534071/CAT10193534
 ```
 
 ### function filter for pattern
+
+#### testing
+```{R }
+  ### troubleshooting
+x<- dftext_sep_not_prefix   %>%
+  filter(
+    !rownum %in% c(dftext_sep_not_prefix_bottom$rownum )
+  )
+ # x_filterchar = splitinto_pattern_MPbottom
+  x_filterchar = splitinto_pattern_MPtop
+x_char_to_filterfinal = c("", "/")
+
+   x_numtofilterby = 3
+   x_funcsplit_coltosearchcol = x$text_nospace
+   ### end troubleshooting comment out
+
+x_out %>%
+  filter(
+    rownum %in% c(dftext_sep_id1_LU_numberonlytop_I_1$rownum)
+  )%>% View()
+dftext_sep_id1_LU_numberonlytop_I_1 %>%
+    filter(
+      !( rownum %in% c(x_out2$rownum))
+    )%>% View()
+x_out2 %>%
+    filter(
+      ( rownum %in% c(dftext_sep_id1_LU_numberonlytop_I_1 $rownum))
+    )%>% View()
+
+
+dftext_sep_id1_LU_numberonlytop_I_1 %>%
+    filter(
+      !( rownum %in% c(x_out2 $rownum))
+    )%>% View()
+rm(x)
+rm(x_filterchar)
+rm(x_out)
+rm(x_out2)
+rm(x_char_to_filterfinal)
+rm(x_numtofilterby)
+rm(x_funcsplit_coltosearch)
+```
+#### actual function
+
 ```{r }
 
 ### basically this will try to find the instances of TEXT THAT CONTAINS patterns xfilterchar; and will filter for those in which the number <= numtofilter of extra distinct characters besides the patterns that 
-funcsplit_function_filter_forpattern <- function(x, x_filterchar, x_char_to_filterfinal = c("", "/"), x_numtofilterby = 3){
+funcsplit_function_filter_forpattern <- function(x, x_filterchar, x_char_to_filterfinal = c("", "/"), x_numtofilterby = 3, x_funcsplit_coltosearch){
 # 
-  ### troubleshooting
- x <- dftext_sep_not_prefix
- # x_filterchar = splitinto_pattern_MPbottom
-  x_filterchar = splitinto_pattern_MPtop
 
-   x_num_tofilter = 3
-   ### end troubleshooting comment out
-
-# this takes input df and tries to find pattern xfilterchar in the text without spaces; and puts all occurrences of the pattern in a string called text1bottom
-
+# this takes input df and tries to find pattern xfilterchar in the text without spaces; and puts all occurrences of the pattern in a string called textbottom
+  x <- x %>% 
+    cbind(
+      tibble(
+       funcsplit_coltosearchcol= x_funcsplit_coltosearchcol
+      )
+    )
+ 
+  
 x_out <- x%>% 
   group_by(
     rownum
   ) %>%
   mutate(
-    text1_bottom = 
+    text_bottom = 
       paste(
         str_extract_all(
         pattern = x_filterchar , 
-        text1_nospace
+        funcsplit_coltosearchcol
       ) %>% unlist(), 
       collapse = "|"
       )
     )%>%
   ungroup()  
+
 # this takes the above df and filters for those in which there is a occurrence of pattern  
 x_out2 <- x_out%>% 
   filter(
-    nchar(text1_bottom ) >=2,
-    !is.na(text1_bottom ), text1_bottom != "NA"
+    nchar(text_bottom ) >=2,
+    !is.na(text_bottom ), text_bottom != "NA"
   ) %>% 
   mutate(
     #and removes all occurrences of the pattern. 
-    text1_bottom_filter =
+    text_bottom_filter =
       str_remove_all(
-        string = text1_nospace, 
-        pattern = text1_bottom
+        string = funcsplit_coltosearchcol, 
+        pattern = text_bottom
       ), 
     # If there is lingering text, finds the number of unique chars in lingering text; if text is identical to pattern and has no lingering text ie text is "" will still capture this as 0
- text1_bottom_countdistinct = 
-          nchar(char_unique(text1_bottom_filter)) ,
- text1_bottom_countdistinct_nopattern = 
-  nchar(char_unique(gsub("[[:digit:]]+|M|P", "", text1_bottom  )))
+ text_bottom_countdistinct = 
+          nchar(char_unique(text_bottom_filter)) ,
+ text_bottom_removepattern =  gsub("[[:digit:]]+|M|P", "", text_bottom ), 
+ text_bottom_countdistinct_nopattern = 
+  nchar(char_unique(text_bottom_removepattern ))
  # text2_countdistinct = nchar(text2) 
 
 )%>% 
+  group_by(
+    rownum 
+  ) %>% 
+  mutate(
+ # count number 
+ text_countwords = sum(nchar(el(strsplit(text, "\\s+"))) >= 3)
+  ) %>% 
+  ungroup() %>% 
   # filters those in which the num of distinct chars remaining is found in passed char vector x_char_to_filterfinal (usu "" or "/")
   filter(
-    text1_bottom_filter %in% c(x_char_to_filterfinal),
-    text1_bottom_countdistinct_nopattern <= x_numtofilterby #,
+    (text_bottom_filter %in% c(x_char_to_filterfinal)) |
+    
+    (text_bottom_countdistinct_nopattern <= x_numtofilterby),
+      text_countwords <= 2#,
     # ((text2_countdistinct <= funcsplit_pattern_maxnum)|
     #   is.na( text2))
   )
+
+x_extract <- dftext_sep_id1_LU_numberonlytop_I_1 %>%
+    filter(
+        !( rownum %in% c(x_out2$rownum, dftext_sep_not_prefix_bottom$rownum))
+    )  
+x_out2 %>% 
+  filter(
+    rownum %in% c(x_extract$rownum )
+  )%>% 
+  View()
+x_out2 %>% 
+  filter(
+    rownum %in% c(dftext_sep_id1_LU_numberonlytop_I_1$rownum )
+  )%>% 
+  View()
+
 # x_out  %>%
 #     filter(
 #         grepl("04247", text, perl = TRUE)
@@ -194,7 +266,12 @@ x_out2 <- x_out%>%
 #         grepl("04247", text, perl = TRUE)
 #     ) %>%
 #   View()
-x_out2
+
+
+x_out2 %>% 
+  select(
+    -funcsplit_coltosearchcol
+  )
 }
 
 ```
@@ -209,6 +286,29 @@ char_unique <-
        includes=c("#include <string>",
                  "#include <iostream>"))
 
+
+.char_unique_code <- "
+std::vector < std::string > s = as< std::vector < std::string > >(x);
+unsigned int input_size = s.size();
+
+std::vector < std::string > chrs(input_size);
+
+for (unsigned int i=0; i<input_size; i++) {
+
+  std::string t = s[i];
+
+  for (std::string::iterator chr=t.begin();
+       chr != t.end(); ++chr) {
+
+    if (chrs[i].find(*chr) == std::string::npos) {
+      chrs[i] += *chr;
+    }
+
+  }
+
+}
+return(wrap(chrs));
+"
 
 ```
 
@@ -241,30 +341,6 @@ funcsplit_splitinto <- function(splintinto_df , splitinto_colname = "text1", spl
 
       
       
-      require(inline)
-
-.char_unique_code <- "
-std::vector < std::string > s = as< std::vector < std::string > >(x);
-unsigned int input_size = s.size();
-
-std::vector < std::string > chrs(input_size);
-
-for (unsigned int i=0; i<input_size; i++) {
-
-  std::string t = s[i];
-
-  for (std::string::iterator chr=t.begin();
-       chr != t.end(); ++chr) {
-
-    if (chrs[i].find(*chr) == std::string::npos) {
-      chrs[i] += *chr;
-    }
-
-  }
-
-}
-return(wrap(chrs));
-"
 
       
   splitinto_dfLU <- splintinto_df %>% 
@@ -272,6 +348,7 @@ return(wrap(chrs));
   mutate(
     rownum2 = row_number(), 
     id = text1,
+    # text 2 will be applicable for 
     type = text2
     ) %>% 
   gather(
@@ -363,6 +440,11 @@ return(wrap(chrs));
           TRUE ~ 1 
     )
     )%>%  
+    group_by(
+      text, rownum,textno_letter_concat
+    ) %>% 
+    slice(1) %>% 
+    ungroup() %>% 
     # arrange(
     #   rownum
     # )
@@ -378,7 +460,7 @@ return(wrap(chrs));
     # ) 
   summarise(
     id_no = paste(
-      textno_letter_concat, collapse =splitinto_outputchar
+      textno_letter_concat , collapse =splitinto_outputchar
     ), 
     id_onlydecimal =  paste(
       textno_num %>% sort(), collapse =splitinto_outputchar
@@ -526,14 +608,24 @@ dftext_sep_not_prefix <- dftext_sep%>%
   )%>% 
   mutate(
     # then takes text and reduces or removes space
-    text1_reducespace = gsub("  ", " ", text1, perl = TRUE), 
-    text1_nospace = gsub(" ", "", text1, perl = TRUE) 
+    # this looks at text, not text 1 (which we only needed for above step identifying correctly labeled top IDs, eg P234, PB; this one should look at owhole)
+    text_reducespace = gsub("  ", " ", text, perl = TRUE), 
+    text_nospace = gsub(
+      " ", "", 
+      gsub(
+        "[^[:alnum:][:space:]/!]", "",
+        text
+      ),
+      perl = TRUE) 
+  ) %>% 
+  filter(
+    !grepl("RD$|MAIN$|ST$|5T$|MA1N$", text_nospace, perl = TRUE, ignore.case = TRUE)
   )
 
 
 # this is easier to find bottom because contains M or P after digit, whereas top id sometimes only has number
 dftext_sep_not_prefix_bottom <- dftext_sep_not_prefix %>% 
-  funcsplit_function_filter_forpattern(x = ., x_filterchar =splitinto_pattern_MPbottom , x_char_to_filterfinal = c("", "/"), x_numtofilterby = 3)
+  funcsplit_function_filter_forpattern(x = ., x_filterchar =splitinto_pattern_MPbottom , x_char_to_filterfinal = c("", "/"), x_numtofilterby = 3, x_funcsplit_coltosearch= .$text_nospace)
 # there was a 
 dftext_sep_not_prefix %>% 
   filter(
@@ -547,12 +639,89 @@ dftext_sep_not_prefix_bottom %>%
   View()
 
 ### should this be 
-dftext_onlyID1row_notprefixtop <-   dftext_sep_not_prefix  %>% 
+dftext_sep_not_prefix_top <-   dftext_sep_not_prefix  %>% 
   filter(
     !rownum %in% c(dftext_sep_not_prefix_bottom$rownum )
   )%>% 
-  funcsplit_function_filter_forpattern(x = ., x_filterchar =splitinto_pattern_MPtop , x_char_to_filterfinal = c("", "/"), x_numtofilterby = 3)
+  funcsplit_function_filter_forpattern(x = ., x_filterchar =splitinto_pattern_MPtop , x_char_to_filterfinal = c("", "/"), x_numtofilterby = 3)  
 
+dftext_sep_not_prefix_top  %>% 
+  mutate(
+    textend = gsub(
+      " [[:digit:]]$| [[:alpha:]]$| !$", "present",  text, ignore.case = TRUE, perl = TRUE
+    )
+  ) %>% 
+  filter(
+     grepl("present", textend, perl = TRUE ) 
+  ) %>% 
+  mutate(
+   endtext = str_sub(text ,start = -1)
+  ) %>% 
+  # filter(
+  #    grepl("present", textend, perl = TRUE ) 
+  # )%>% 
+  group_by(
+    endtext
+  ) %>% 
+  slice(1) %>% 
+  ungroup() %>% 
+  View()
+
+
+dftext_sep_not_prefix_bottomtop <- dftext_onlyID1row %>% 
+  # mutate(
+  #   
+  # )
+  select(
+    text:rownum
+  ) %>% 
+  bind_rows(
+    dftext_sep_not_prefix_bottom %>% 
+      bind_rows(
+        dftext_sep_not_prefix_top
+      ) %>% 
+      mutate(
+        text1 = text_nospace,
+        # text2 =
+        #   gsub(".* A$|"),
+        text2 = 
+          mgsub(
+            text, 
+            pattern = c(".* A$", ".* I$", ".* 1$", ".* !", ".* G"), 
+            replacement = c("A", "I", "I", "I", "G"),
+            ignore.case = TRUE
+            ),
+        text2 = case_when(
+          nchar(text2) == 1 ~ text2
+        )
+      ) %>% 
+      select(
+        text:rownum
+      )
+  ) %>% 
+  mutate(
+    texttype = "ID"
+  )
+
+
+dftext_sep_bottomtop_id <- dftext_sep_not_prefix_bottomtop%>% 
+   # filter()
+  funcsplit_splitinto(
+    splintinto_df = ., 
+    splitinto_colname = "text1", 
+    splintinto_char = "/", 
+    splitinto_outputchar = "/"
+    ) %>% 
+   mutate(
+     matchtype= "top_id1", 
+     id_bait = id_no, 
+     id = id_no
+   )
+
+dftext_sep_id1_LU_numberonlybottom_number_i_1 %>% 
+  filter(
+   !(rownum %in% c( dftext_sep_bottomtop_id$rownum) ) 
+  )
 dftext_sep_keeprows <- dftext_onlyID1row %>% 
   bind_rows(
     dftext_sep %>% 
