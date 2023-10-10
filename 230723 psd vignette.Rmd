@@ -126,7 +126,7 @@ fsis_init_LU <- readxl::read_excel(
 
 fsis_init_LU_combo <- crossing(
   combination = unlist(lapply(1:nrow(fsis_init_LU), function(n) combn(fsis_init_LU$Initial, n, paste, collapse=""))), 
-  ending = c(",", ".")
+  ending = c(",", ".", "/")
 ) %>% 
   mutate(
     combination =  stringi_str_order( combination),
@@ -203,121 +203,121 @@ rm(x_funcsplit_coltosearchcol)
 
 #### bottom orig 
 ```{r }
-funcsplit_function_filter_forpattern <-function(x, x_filterchar, x_char_to_filterfinal = c("", "/"), x_numtofilterby = 3, x_funcsplit_coltosearch){
-    # 
-    ### troubleshooting
-    #  x <- dftext_sep_not_prefix # %>%
-    #   # filter(
-    #   #   !rownum %in% c(dftext_sep_not_prefix_bottom$rownum )
-    #   # )
-    #  # x_filterchar = splitinto_pattern_MPbottom
-    #   x_filterchar = splitinto_pattern_MPtop
-    # x_char_to_filterfinal = c("", "/")
-    # 
-    #    x_numtofilterby = 3
-    #    x_funcsplit_coltosearch = x$text_nospace
-    ### end troubleshooting comment out
-    
-    # this takes input df and tries to find pattern xfilterchar in the text without spaces; and puts all occurrences of the pattern in a string called textbottom
-    x <- x %>% 
-        cbind(
-            tibble(
-                funcsplit_coltosearchcol= x_funcsplit_coltosearch
-            )
-        )
-    
-    
-    x_out <- x%>% 
-        group_by(
-            rownum
-        ) %>%
-        mutate(
-            text_bottom = 
-                paste(
-                    str_extract_all(
-                        pattern = x_filterchar , 
-                        funcsplit_coltosearchcol
-                    ) %>% unlist(), 
-                    collapse = "|"
-                )
-        )%>%
-        ungroup()  
-    
-    # x_out %>% 
-    #   filter(
-    #     rownum %in% c(dftext_sep_id1_LU_numberonlytop_I_1$rownum)
-    #   )%>% View()
-    # dftext_sep_id1_LU_numberonlytop_I_1 %>% 
-    #     filter(
-    #       !( rownum %in% c(x_out2$rownum))  
-    #     )%>% View()
-    # this takes the above df and filters for those in which there is a occurrence of pattern  
-    x_out2 <- x_out%>% 
-        filter(
-            nchar(text_bottom ) >=2,
-            !is.na(text_bottom ), text_bottom != "NA"
-        ) %>% 
-        mutate(
-            #and removes all occurrences of the pattern. 
-            text_bottom_filter =
-                str_remove_all(
-                    string = funcsplit_coltosearchcol, 
-                    pattern = text_bottom
-                ), 
-            # If there is lingering text, finds the number of unique chars in lingering text; if text is identical to pattern and has no lingering text ie text is "" will still capture this as 0
-            text_bottom_countdistinct = 
-                nchar(char_unique(text_bottom_filter)) ,
-            text_bottom_removepattern =  gsub("[[:digit:]]+|M|P", "", text_bottom ), 
-            text_bottom_countdistinct_nopattern = 
-                nchar(char_unique(text_bottom_removepattern )), 
-            # count number 
-            text_countwords = sum(nchar(el(strsplit(text_bottom_removepattern, "\\s+"))) >= 3)
-            # text2_countdistinct = nchar(text2) 
-            
-        )%>% 
-        # filters those in which the num of distinct chars remaining is found in passed char vector x_char_to_filterfinal (usu "" or "/")
-        filter(
-            text_bottom_filter %in% c(x_char_to_filterfinal),
-            text_bottom_countdistinct_nopattern <= x_numtofilterby #,
-            # ((text2_countdistinct <= funcsplit_pattern_maxnum)|
-            #   is.na( text2))
-        )
-    # x_out2 %>% 
-    #     filter(
-    #       ( rownum %in% c(dftext_sep_id1_LU_numberonlytop_I_1 $rownum))  
-    #     )%>% View()
-    
-    
-    # dftext_sep_id1_LU_numberonlytop_I_1 %>% 
-    #     filter(
-    #       !( rownum %in% c(x_out2 $rownum))  
-    #     )%>% View()
-    
-    # x_out  %>%
-    #     filter(
-    #         grepl("04247", text, perl = TRUE)
-    #     ) %>%
-    #   View()
-    # 
-    # x_out2  %>%
-    #     filter(
-    #         grepl("04247", text, perl = TRUE)
-    #     ) %>%
-    #   View()
-    
-    # rm(x)
-    # rm(x_filterchar)
-    # rm(x_out)
-    # rm(x_out2)
-    # rm(x_char_to_filterfinal)
-    # rm(x_numtofilterby)
-    # rm(x_funcsplit_coltosearch)
-    
-    x_out2 %>% 
-        select(
-            -funcsplit_coltosearchcol
-        )
-}
+# funcsplit_function_filter_forpattern <-function(x, x_filterchar, x_char_to_filterfinal = c("", "/"), x_numtofilterby = 3, x_funcsplit_coltosearch){
+#     # 
+#     ### troubleshooting
+#     #  x <- dftext_sep_not_prefix # %>%
+#     #   # filter(
+#     #   #   !rownum %in% c(dftext_sep_not_prefix_bottom$rownum )
+#     #   # )
+#     #  # x_filterchar = splitinto_pattern_MPbottom
+#     #   x_filterchar = splitinto_pattern_MPtop
+#     # x_char_to_filterfinal = c("", "/")
+#     # 
+#     #    x_numtofilterby = 3
+#     #    x_funcsplit_coltosearch = x$text_nospace
+#     ### end troubleshooting comment out
+#     
+#     # this takes input df and tries to find pattern xfilterchar in the text without spaces; and puts all occurrences of the pattern in a string called textbottom
+#     x <- x %>% 
+#         cbind(
+#             tibble(
+#                 funcsplit_coltosearchcol= x_funcsplit_coltosearch
+#             )
+#         )
+#     
+#     
+#     x_out <- x%>% 
+#         group_by(
+#             rownum
+#         ) %>%
+#         mutate(
+#             text_bottom = 
+#                 paste(
+#                     str_extract_all(
+#                         pattern = x_filterchar , 
+#                         funcsplit_coltosearchcol
+#                     ) %>% unlist(), 
+#                     collapse = "|"
+#                 )
+#         )%>%
+#         ungroup()  
+#     
+#     # x_out %>% 
+#     #   filter(
+#     #     rownum %in% c(dftext_sep_id1_LU_numberonlytop_I_1$rownum)
+#     #   )%>% View()
+#     # dftext_sep_id1_LU_numberonlytop_I_1 %>% 
+#     #     filter(
+#     #       !( rownum %in% c(x_out2$rownum))  
+#     #     )%>% View()
+#     # this takes the above df and filters for those in which there is a occurrence of pattern  
+#     x_out2 <- x_out%>% 
+#         filter(
+#             nchar(text_bottom ) >=2,
+#             !is.na(text_bottom ), text_bottom != "NA"
+#         ) %>% 
+#         mutate(
+#             #and removes all occurrences of the pattern. 
+#             text_bottom_filter =
+#                 str_remove_all(
+#                     string = funcsplit_coltosearchcol, 
+#                     pattern = text_bottom
+#                 ), 
+#             # If there is lingering text, finds the number of unique chars in lingering text; if text is identical to pattern and has no lingering text ie text is "" will still capture this as 0
+#             text_bottom_countdistinct = 
+#                 nchar(char_unique(text_bottom_filter)) ,
+#             text_bottom_removepattern =  gsub("[[:digit:]]+|M|P", "", text_bottom ), 
+#             text_bottom_countdistinct_nopattern = 
+#                 nchar(char_unique(text_bottom_removepattern )), 
+#             # count number 
+#             text_countwords = sum(nchar(el(strsplit(text_bottom_removepattern, "\\s+"))) >= 3)
+#             # text2_countdistinct = nchar(text2) 
+#             
+#         )%>% 
+#         # filters those in which the num of distinct chars remaining is found in passed char vector x_char_to_filterfinal (usu "" or "/")
+#         filter(
+#             text_bottom_filter %in% c(x_char_to_filterfinal),
+#             text_bottom_countdistinct_nopattern <= x_numtofilterby #,
+#             # ((text2_countdistinct <= funcsplit_pattern_maxnum)|
+#             #   is.na( text2))
+#         )
+#     # x_out2 %>% 
+#     #     filter(
+#     #       ( rownum %in% c(dftext_sep_id1_LU_numberonlytop_I_1 $rownum))  
+#     #     )%>% View()
+#     
+#     
+#     # dftext_sep_id1_LU_numberonlytop_I_1 %>% 
+#     #     filter(
+#     #       !( rownum %in% c(x_out2 $rownum))  
+#     #     )%>% View()
+#     
+#     # x_out  %>%
+#     #     filter(
+#     #         grepl("04247", text, perl = TRUE)
+#     #     ) %>%
+#     #   View()
+#     # 
+#     # x_out2  %>%
+#     #     filter(
+#     #         grepl("04247", text, perl = TRUE)
+#     #     ) %>%
+#     #   View()
+#     
+#     # rm(x)
+#     # rm(x_filterchar)
+#     # rm(x_out)
+#     # rm(x_out2)
+#     # rm(x_char_to_filterfinal)
+#     # rm(x_numtofilterby)
+#     # rm(x_funcsplit_coltosearch)
+#     
+#     x_out2 %>% 
+#         select(
+#             -funcsplit_coltosearchcol
+#         )
+# }
 
 
 ```
@@ -338,14 +338,18 @@ funcsplit_function_filter_forpattern <- function(x, x_filterchar, x_char_to_filt
 #     !rownum %in% c(x_out2$rownum )
 #   )
 # 
-# x<- dftext_sep_not_prefix   
-# 
+# x<- dftext_sep_not_prefix
+# # 
 #  x_filterchar = splitinto_pattern_MPbottom
-#   x_filterchar = splitinto_pattern_MPtop
-# x_char_to_filterfinal = c("", "/")
+#   # x_filterchar = splitinto_pattern_MPtop
+# # x_char_to_filterfinal = c("", "/")
 # 
-#    x_numtofilterby = 4
-#    x_funcsplit_coltosearchcol = x$text_nospace
+# x_char_to_filterfinal = NULL
+# 
+#  x_numtofilterby =3
+
+   # x_numtofilterby = 4
+   # x_funcsplit_coltosearchcol = x$text_nospace
    ### end troubleshooting comment out
 
   
@@ -375,6 +379,17 @@ x_out <- x%>%
     )%>%
   ungroup()  
 
+# x_out  %>% 
+#     filter(
+#         grepl("04247|00605", text, perl = TRUE)
+#     ) %>% 
+#     View()
+# x_out2  %>% 
+#     filter(
+#         grepl("04247|00605", text, perl = TRUE)
+#     ) %>% 
+#     View()
+
 # this takes the above df and filters for those in which there is a occurrence of pattern  
 x_out2 <- x_out%>% 
   filter(
@@ -402,7 +417,7 @@ x_out2 <- x_out%>%
           nchar(char_unique(text_bottom_filter)) ,
  # removes what could possibly be id pattern in text bottom; this is probably 
  text_bottom_removeMPdigit =  gsub("[[:digit:]]+|M|P", "", text_bottom_filter ), 
-  text_bottom_onlyletter =  gsub("[^[:alpha:]]", "", text_bottom ), 
+  text_bottom_onlyletter =  gsub("[^[:alpha:]]|M|P", "", text_bottom ), 
    # text_onlyletter =  gsub("[^[:alpha:]]", "", text_bottom ), 
 
 text_bottom_countdistinct_onlyletter = nchar(char_unique(text_bottom_onlyletter )),
@@ -472,6 +487,16 @@ if(length(x_char_to_filterfinal) >=2)
       
       )
 }
+# rm(x)
+# rm(x_filterchar)
+# rm(x_out)
+# rm(x_out2)
+# rm(x_char_to_filterfinal)
+# rm(x_numtofilterby)
+# rm(x_funcsplit_coltosearch)
+# rm(x_funcsplit_coltosearchcol)
+
+
 x_out2 %>% 
   select(
     -funcsplit_coltosearchcol
@@ -482,37 +507,6 @@ x_out2 %>%
 
 ### function - char unique
 ```{r }
-require(splitstackshape)
-require(inline)
-char_unique <- 
-  rcpp(sig=signature(x="std::vector < std::string >"),
-       body=.char_unique_code,
-       includes=c("#include <string>",
-                 "#include <iostream>"))
-
-
-.char_unique_code <- "
-std::vector < std::string > s = as< std::vector < std::string > >(x);
-unsigned int input_size = s.size();
-
-std::vector < std::string > chrs(input_size);
-
-for (unsigned int i=0; i<input_size; i++) {
-
-  std::string t = s[i];
-
-  for (std::string::iterator chr=t.begin();
-       chr != t.end(); ++chr) {
-
-    if (chrs[i].find(*chr) == std::string::npos) {
-      chrs[i] += *chr;
-    }
-
-  }
-
-}
-return(wrap(chrs));
-"
 
 ```
 
@@ -527,7 +521,8 @@ funcsplit_splitinto <- function(
     splitinto_coltextcol,
     splitinto_coltextcol2,
     splitinto_colrownum,
-    splitinto_colname = "text1",
+    # below should  be the name of the column that is splitinto_colnamecoltosplit, usu text1 but can also be text_onlyalphanum
+    # splitinto_colname = "text1",
     splintinto_char = "/", 
     splitinto_outputchar = "/"){
   # dftext_septext_notid1row
@@ -554,7 +549,7 @@ funcsplit_splitinto <- function(
         cbind(
           tibble(
             splitinto_split = splitinto_colnamecoltosplit,
-            splitinto_text = splitinto_colname, 
+            splitinto_text = splitinto_coltextcol, 
              splitinto_text2 = splitinto_coltextcol2, 
 
             splitinto_rownum = splitinto_colrownum
@@ -565,17 +560,17 @@ funcsplit_splitinto <- function(
 
       
   splitinto_dfLU <- splintinto_df %>% 
-    cSplit(., splitCols =splitinto_colname, splintinto_char, drop = FALSE) %>% 
+    cSplit(., splitCols ="splitinto_split", splintinto_char, drop = FALSE) %>% 
   mutate(
     rownum2 = row_number(), 
-    id = splitinto_colname,
+    # id = splitinto_colname,
     # text 2 will be applicable for 
     type = splitinto_text2
     ) %>% 
   gather(
     key = textno, 
     value = value, 
-     contains( paste0( splitinto_colname, "_"))
+     contains( paste0( "splitinto_split", "_"))
   ) %>% 
   mutate(
     textno_num = as.numeric(
@@ -620,16 +615,19 @@ funcsplit_splitinto <- function(
           "[^[:digit:]]", 
           "",
           gsub(
-          "S", "5",
-          gsub(
-          "!", "1",
-          gsub(
-          "O", "0",
-          gsub(
-          "I", "1",value
-          ) , perl = TRUE
-        )
-        )
+            "S", "5",
+            gsub(
+              "!", "1",
+              gsub(
+                "Q", "0",
+                gsub(
+                  "O", "0",
+                  gsub(
+                    "I", "1",value
+                  ) , perl = TRUE
+                )
+              )
+            )
           )
         )%>% as.numeric() ,
       textno_letter_concM = 
@@ -711,6 +709,12 @@ funcsplit_splitinto <- function(
 
 ```
 
+### function find matches
+
+```{r }
+
+```
+
 ## actual function to split pdfs
 ```{R }
 
@@ -722,14 +726,14 @@ require(splitstackshape)
   require(tidycensus)
  library(inline)
   require(stringr)
-  
+  require(mgsub)
   
   
   data(fips_code)
   
   ### first M+ (M203), 
   
-    splitinto_pattern_MP <- "M[[:digit:]]+|[[:digit:]]+M|P[[:digit:]]+|[[:digit:]]+P"
+    # splitinto_pattern_MP <- "M[[:digit:]]+|[[:digit:]]+M|P[[:digit:]]+|[[:digit:]]+P"
    ### first digit alpha / P digit,  eg 3CB/P6139.PB 
     ### second digit followed by P digit , eg 3CB/P6139
     ### third P followed by digit,eg  3JC/P3JC,P  
@@ -752,6 +756,37 @@ funcsplit_pattern_maxnum = (funcsplit_pattern %>%
    ncharcombo == max(ncharcombo)
   ))$combination[1]%>% char_unique() %>% nchar()
 
+require(splitstackshape)
+require(inline)
+char_unique <- 
+  rcpp(sig=signature(x="std::vector < std::string >"),
+       body=.char_unique_code,
+       includes=c("#include <string>",
+                 "#include <iostream>"))
+
+
+.char_unique_code <- "
+std::vector < std::string > s = as< std::vector < std::string > >(x);
+unsigned int input_size = s.size();
+
+std::vector < std::string > chrs(input_size);
+
+for (unsigned int i=0; i<input_size; i++) {
+
+  std::string t = s[i];
+
+  for (std::string::iterator chr=t.begin();
+       chr != t.end(); ++chr) {
+
+    if (chrs[i].find(*chr) == std::string::npos) {
+      chrs[i] += *chr;
+    }
+
+  }
+
+}
+return(wrap(chrs));
+"
 
 # fsis_init_LU_combo_patterns <- funcsplit_pattern %>% 
 #   summarise(
@@ -782,12 +817,18 @@ dftext_sep  <- dftext%>%
     text2_keeporder = text2,
     text2 = stringi_str_order( text2)
   )
-
+dftext_sep %>%
+  filter(
+    rownum == 7254
+  ) %>%
+  View()
 # this then filters down to only those where text2 delim column matches those in the pattern (Eg .pb, .s, etc); 
 # the last filter step makes sure that the pattern terminates text2
 dftext_onlyID1row<- dftext_sep%>% 
   inner_join(
-    funcsplit_pattern,# %>% 
+    funcsplit_pattern %>%
+      select(combination, ending) %>%
+      distinct(),# %>% 
       # select(
       #   finalpattern, combination
       # ), 
@@ -800,7 +841,7 @@ dftext_onlyID1row<- dftext_sep%>%
   filter(
        # rownum == 7643,
    # text2 %in% c(funcsplit_pattern$combination), 
-   nchar(text1)>=2 #, 
+   nchar(text1)>=1 #, 
    # rownum >= 7720
   ) %>% 
   mutate(
@@ -827,6 +868,11 @@ dftext_onlyID1row<- dftext_sep%>%
   slice(1)%>% 
   ungroup() 
   
+dftext_onlyID1row %>%
+  filter(
+    rownum == 7254
+  ) %>%
+  View()
 
 # filter those that are not rownum captured above. In case that 
 dftext_sep_not_prefix <- dftext_sep%>% 
@@ -879,7 +925,12 @@ dftext_sep_not_prefix <- dftext_sep%>%
 # dftext_sep_not_prefix_bottom <- dftext_sep_not_prefix %>% 
 #   funcsplit_function_filter_forpattern(x = ., x_filterchar =splitinto_pattern_MPbottom , x_char_to_filterfinal = c("", "/"), x_numtofilterby = 3, x_funcsplit_coltosearch= .$text_nospace)
 dftext_sep_not_prefix_bottom <- dftext_sep_not_prefix%>% 
-  funcsplit_function_filter_forpattern(., x_filterchar =splitinto_pattern_MPbottom, x_char_to_filterfinal = NULL, x_numtofilterby = 4, x_funcsplit_coltosearchcol= .$text_nospace)
+  funcsplit_function_filter_forpattern(., x_filterchar =splitinto_pattern_MPbottom,
+  x_char_to_filterfinal = NULL,
+  # x_char_to_filterfinal = c("", "/"),
+  x_numtofilterby = 3,
+  x_funcsplit_coltosearchcol= .$text_nospace)#%>% 
+  # funcsplit_function_filter_forpattern(x = ., x_filterchar =splitinto_pattern_MPtop , x_char_to_filterfinal = c("", "/"), x_numtofilterby = 3, x_funcsplit_coltosearchcol= .$text_nospace)
 # there was a 
 
 
@@ -889,6 +940,11 @@ dftext_sep_not_prefix %>%
   ) %>% 
   View()
 dftext_sep_not_prefix_bottom %>% 
+  filter(
+    grepl("04247|00605", text, perl = TRUE)
+  ) %>% 
+  View()
+dftext_onlyID1row %>% 
   filter(
     grepl("04247|00605", text, perl = TRUE)
   ) %>% 
@@ -989,6 +1045,7 @@ dftext_sep_not_prefix_bottomtop <- dftext_onlyID1row %>%
         # text2 =
         #   gsub(".* A$|"),
         text2 = 
+          # this substitutes common optical errors into 
           mgsub::mgsub(
             text, 
             pattern = c(".* A$", ".* I$", ".* 1$", ".* !", ".* G"), 
@@ -1016,7 +1073,7 @@ dftext_sep_bottomtop_id <- dftext_sep_not_prefix_bottomtop%>%
     splitinto_coltextcol = .$text,
     splitinto_coltextcol2 = .$text2,
     splitinto_colrownum = .$rownum,
-    splitinto_col  = "text1", 
+    # splitinto_col  = "text1", 
     splintinto_char = "/", 
     splitinto_outputchar = "/"
     )   %>% 
@@ -1026,23 +1083,257 @@ dftext_sep_bottomtop_id <- dftext_sep_not_prefix_bottomtop%>%
 
 dftext_sep_not_prefix_remainder <- dftext_sep_not_prefix  %>% 
   filter(
-    !rownum %in% c(dftext_sep_bottomtop_id$rownum )
+    !rownum %in% c(dftext_sep_bottomtop_id$rownum ) 
+    # filter(
+    #   # remove more roads
+    #   !grepl("US|SW")
+    # )
   )%>% 
-  funcsplit_function_filter_forpattern(x = ., x_filterchar =splitinto_pattern_MPtop , x_char_to_filterfinal = NULL, x_numtofilterby = 3, x_funcsplit_coltosearchcol= .$text_nospace) 
-dftext_sep_not_prefix_remainder_id <- dftext_sep_not_prefix_remainder  %>% 
+  funcsplit_function_filter_forpattern(x = ., x_filterchar =splitinto_pattern_MPtop , x_char_to_filterfinal = NULL, x_numtofilterby = 3, x_funcsplit_coltosearchcol= .$text_nospace)
+
+dftext_sep_not_prefix_remainder_id <- dftext_sep_not_prefix_remainder  %>%
 funcsplit_splitinto(
     splintinto_df = ., 
     splitinto_colnamecoltosplit = .$text_onlyalphanum ,
     splitinto_coltextcol = .$text,
     splitinto_coltextcol2 = .$text2,
     splitinto_colrownum = .$rownum,
-    splitinto_col  = "text1", 
     splintinto_char = "/", 
     splitinto_outputchar = "/"
     )   %>% 
   arrange(
     rownum
+  ) %>% 
+  filter(
+    !is.na(id_no), 
   )
+# this will correct for unreognized I = 1, S = 5, Q = 0, 0 = O
+funcsplit_pattern_replace_numalphatext <-  c(
+  ### P 
+  ### I = 1
+  "IP-[[:digit:]]+",
+  "I[a-zA-Z]+P-[[:digit:]]+",
+  #### S = 5
+  "SP-[[:digit:]]+",
+  "S[a-zA-Z]+P-[[:digit:]]+",
+  #### Q = 0
+  "QP-[[:digit:]]+",
+  "Q[a-zA-Z]+P-[[:digit:]]+",
+  #### O = 0
+  "OP-[[:digit:]]+",
+  "O[a-zA-Z]+P-[[:digit:]]+",
+  #### L = 1
+  "LP-[[:digit:]]+",
+  "L[a-zA-Z]+P-[[:digit:]]+",
+  #### ! = 1
+  "!P-[[:digit:]]+",
+  "![a-zA-Z]+P-[[:digit:]]+" ,
+  ### M
+  #### I = 1
+  "IM-[[:digit:]]+", 
+  "I[a-zA-Z]+M-[[:digit:]]+", 
+  #### S = 5
+  "SM-[[:digit:]]+",
+  "S[a-zA-Z]+M-[[:digit:]]+", 
+  #### Q = 0
+  "QM-[[:digit:]]+",
+  "Q[a-zA-Z]+M-[[:digit:]]+",
+  #### O = 0
+  "OM-[[:digit:]]+",
+  "O[a-zA-Z]+M-[[:digit:]]+", 
+  #### L = 1
+  "LM-[[:digit:]]+",
+  "L[a-zA-Z]+M-[[:digit:]]+" , 
+  #### ! = 1
+  "!M-[[:digit:]]+",
+  "![a-zA-Z]+M-[[:digit:]]+" 
+  
+)
+
+dftext_sep_not_prefix_id_correct <-dftext_sep_bottomtop_id %>%
+  filter(
+   !rownum %in% c(dftext_sep_not_prefix_remainder_id$rownum ) 
+  ) %>%
+  bind_rows(
+    dftext_sep_not_prefix_remainder_id
+  )  %>% 
+      filter(
+      # remove more roads
+      !grepl("US|SW", text, perl = TRUE)
+    ) %>%
+  # filter(
+  #   id_onlydecimal != id_onlydecimal_convert_I_1
+  # ) %>% 
+  cSplit(., splitCols ="id_onlydecimal_convert_I_1", "/", drop = FALSE) %>%
+  group_by(
+    rownum 
+  ) %>%
+  mutate(
+    id_no = 
+      case_when(
+        (id_onlydecimal != id_onlydecimal_convert_I_1) & 
+          (grepl(paste(funcsplit_pattern_replace_numalphatext, collapse = "|"), id_no, perl = TRUE,ignore.case =TRUE)) ~ 
+          
+          mgsub(
+            string = id_no, 
+            pattern = c(
+              funcsplit_pattern_replace_numalphatext
+            ), 
+            replacement  = c(
+              "P-replace",
+              "P-replace",
+              "P-replace",
+              "P-replace", 
+              "P-replace", 
+              "P-replace", 
+              "P-replace", 
+              "P-replace", 
+              "P-replace", 
+              "P-replace", 
+               "P-replace", 
+               "P-replace", 
+              "M-replace", 
+
+              "M-replace", 
+
+              "M-replace", 
+              "M-replace",  
+              "M-replace", 
+              "M-replace",  
+              "M-replace", 
+              "M-replace",  
+              "M-replace", 
+              "M-replace",
+              "M-replace",  
+              "M-replace"
+
+              ) 
+          )
+        , 
+        TRUE ~ id_no
+      ), 
+    id_no = gsub(
+      "M-replace", paste0("M-", id_onlydecimal_convert_I_1_1), 
+      id_no
+    ), 
+    id_no = gsub(
+      "P-replace", paste0("P-", id_onlydecimal_convert_I_1_1), 
+      id_no
+    )
+  ) %>%
+  ungroup()  
+
+dftext_sep_bottomtop_id_extract <- dftext_sep_not_prefix_id_correct %>% 
+  filter(
+    id_onlydecimal != id_onlydecimal_convert_I_1#, 
+    # grepl(x = text ,pattern = "0346" , perl = TRUE)
+  ) 
+dftext_sep_bottomtop_id_extract <-dftext %>% 
+  filter(
+    # id_onlydecimal != id_onlydecimal_convert_I_1, 
+    grepl(x = text ,pattern = "0346" , perl = TRUE)
+  ) 
+## this looks at the text, identifies row numbers that are likely IDs because they match the upper and lower IDs found
+dftext_sep_not_prefix_id_correct_pagenumber <-  dftext%>%
+  filter(
+    rownum >= min(dftext_sep_not_prefix_id_correct$rownum)
+  )%>%
+  mutate(
+    textnum = as.character(as.numeric(str_squish(text))),
+    possible_idtype = "pagenumber"
+  ) %>% 
+  filter(
+    !(is.na(textnum)),
+    !(rownum %in% c(dftext_sep_not_prefix_id_correct$rownum ))
+  )%>%
+  bind_rows(
+    dftext_sep_not_prefix_id_correct %>%
+      select(
+        rownum, id_no
+      ) %>%
+      distinct()%>%
+      mutate(
+        possible_idtype = "id_found"
+      ) 
+      # group_by(
+      #   id_no
+      # ) %>%
+      #  mutate(
+      #    list_nos = 
+      #  )
+      # gather(
+      #   key = numorder,
+      #   value = textnum,
+      #   contains("id_onlydecimal_convert_I_1_")
+      # )
+  ) %>%
+  # filter(
+  #   !is.na(textnum )
+  # )%>%
+  arrange(
+    rownum
+  ) %>%
+  mutate(
+    lagtext = lag(id_no),
+    leadtext = lead(id_no)
+  ) %>%
+  group_by(
+    rownum
+  )%>%
+  mutate(
+    keep = 
+      case_when(
+        (possible_idtype == "pagenumber") & 
+          (
+            (
+              grepl(
+                pattern =textnum, 
+                x = lagtext,
+                perl = TRUE 
+              )
+            )
+          ) ~ lagtext, 
+        (possible_idtype == "pagenumber") & 
+          (
+              (
+                grepl(
+                  pattern =textnum, 
+                  x =leadtext,
+                  perl = TRUE 
+                )
+              )
+          ) ~ leadtext, 
+        TRUE~ "no"
+      )
+  )%>%
+  ungroup()
+  
+  
+dftext_sep_id_correct <- dftext_sep_not_prefix_id_correct %>%
+  select(
+    text:texttype, id_no# ,
+    # contains(
+    #   "id_onlydecimal_convert_I_1_"
+    # )
+  ) %>%
+  bind_rows(
+    dftext_sep_not_prefix_id_correct_pagenumber %>%
+      filter(
+        keep != "no"
+      ) %>%
+      mutate(
+        id_no = keep, 
+        texttype = "ID"
+      ) %>%
+      select(
+        text:rownum, id_no
+      ) 
+  ) %>%
+  arrange(
+    rownum 
+  )
+
+
 dftext_sep_bottomtop_id_extract <- dftext_sep_bottomtop_id %>% 
   group_by(
     id_onlydecimal
@@ -1050,7 +1341,7 @@ dftext_sep_bottomtop_id_extract <- dftext_sep_bottomtop_id %>%
   filter(
     (likelyidtype == lag(likelyidtype))|
       (likelyidtype == lead(likelyidtype))
-  )
+  ) 
 
 estdata_id %>% 
   filter(
@@ -1070,7 +1361,10 @@ estdata_id %>%
   # ) %>% 
   # View()
 
-
+}
+```
+#### prev orig func
+```{r}
 dftext_sep_keeprows <- dftext_onlyID1row %>% 
   bind_rows(
     dftext_sep %>% 
