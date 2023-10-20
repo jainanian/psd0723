@@ -8,6 +8,12 @@ date: "2023-07-23"
 
 ## get est time 
 ```{r }
+estdata2 <- data.table::fread(
+  "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/230624_psd_geo.csv"
+) %>% 
+  filter(
+    value >=1
+  )
 estdata <- data.table::fread(
   "//jna_nol/asus/msi/work/farmer welfare/PSD/FI Data/230624_psd_geo.csv"
 ) %>% 
@@ -15,22 +21,65 @@ estdata <- data.table::fread(
     est_num, year_c, address:GEOID_char
   ) %>% 
   distinct()
-estdata_id <- estdata %>% 
-  # mutate(
-  #   est_num = gsub("+","/", est_num)
-  # ) %>% 
-  funcsplit_splitinto(
-    splintinto_df = ., 
-    splitinto_colname = "est_num", 
-    splintinto_char = "+", 
-    splitinto_outputchar = "/"
-    )
+# estdata_id <- estdata %>% 
+#   # mutate(
+#   #   est_num = gsub("+","/", est_num)
+#   # ) %>% 
+#   funcsplit_splitinto(
+#     splintinto_df = ., 
+#     splitinto_colname = "est_num", 
+#     splintinto_char = "+", 
+#     splitinto_outputchar = "/", 
+#     splitinto_coltextcol = 
+#     )
 ```
 
 ### get ids for estnum 
 ```{r }
- 
-estdata_id <- estdata %>% 
+estdata_unnest <- estdata %>%
+  mutate(
+    rownum = row_number()
+  )  %>% 
+  tidytext::unnest_tokens(
+    output = idsplit,
+    input =est_num, 
+    token = "regex", 
+    pattern = "+|/",
+    to_lower = FALSE, 
+    drop = FALSE
+  ) %>% 
+  mutate(
+    estnumletter = gsub(
+      "[^[:alpha:]]", "",idsplit
+    )
+  ) %>% 
+  group_by(
+    estnumletter
+  ) %>% 
+  mutate(
+    totalnum = length(unique(est_num))
+  ) %>% 
+  ungroup()%>% 
+  group_by(
+    estnumletter, year_c, totalnum
+  ) %>% 
+  summarise(
+    num = length(unique(est_num))
+  ) %>% 
+  ungroup()%>% 
+  
+  spread(
+    key = year_c,
+    value = num 
+  ) %>% 
+  select(
+    totalnum, everything()
+  ) %>% 
+  arrange(
+    -totalnum
+  )
+
+estdata_id <- estdata %>%
   mutate(
     rownum = row_number()
   ) %>% 
@@ -43,10 +92,28 @@ estdata_id <- estdata %>%
         splitinto_coltextcol = .$est_num,
         splitinto_coltextcol2 = .$est_num,
         splitinto_colrownum = .$rownum,
-        splitinto_colname  = "est_num", 
+        # splitinto_colname  = "est_num", 
         splintinto_char = "+", 
         splitinto_outputchar = "/"
-     )
+    #     
+    #         splintinto_df = ., 
+    # splitinto_colnamecoltosplit = .$text1 ,
+    # splitinto_coltextcol = .$text,
+    # splitinto_coltextcol2 = .$text2,
+    # splitinto_colrownum = .$rownum,
+    # # splitinto_col  = "text1", 
+    # splintinto_char = "/", 
+    # splitinto_outputchar = "/"
+
+     )%>% 
+    mutate(
+        #keep only M or P
+        id_no_simple =  
+            gsub(
+                "[^[:digit:]MP/-]", "",
+                id_no
+            ) 
+    )
 ```
 
 ## call data archives org api
@@ -505,10 +572,10 @@ x_out2 %>%
 
 ```
 
-### function - char unique
-```{r }
+<!-- ### function - char unique -->
+<!-- ```{r } -->
 
-```
+<!-- ``` -->
 
 ### function funcsplit_splitinto
 
@@ -709,13 +776,106 @@ funcsplit_splitinto <- function(
 
 ```
 
-### function find matches
+<!-- ### function to search remainder of text for possible pattern matches  -->
+<!-- ```{r } -->
+
+
+<!-- ``` -->
+
+### function to look above and below and pull 
 
 ```{r }
+func_findabove_belowmatch <- function(funcfindabove_df,
+funcfindabove_idcol1,funcfindabove_colmatch, funcfindabove_idcol,funcfindabove_refdf){
+  require(tidytext)
+  funcfindabove_df = dftext_sep_id_correct
+  funcfindabove_idcol1 = funcfindabove_df$id_no
+  funcfindabove_colmatch= funcfindabove_df$id_onlydecimal_convert_I_1
+  # funcfindabove_idcol= funcfindabove_df$id_no
+  funcfindabove_refdf = estdata_id %>% 
+    tidytext::unnest_tokens(
+        output = idsplit,
+        input =id_no_simple, 
+        token = "regex", 
+        pattern = "/",
+        to_lower = FALSE, 
+        drop = FALSE
+    )
+  funcfindabove_df2 <- funcfindabove_df  %>% 
+    cbind(
+      tibble(
+        # this is to see if 
+        colid1= funcfindabove_idcol1
+      )
+    )%>% 
+    cbind(
+      tibble(
+        # this is to see if 
+        colmatch= funcfindabove_colmatch
+      )
+    ) %>% 
+    mutate(
+      #keep only M or P
+     id_no_simple =  
+             gsub(
+        "[^[:digit:]MP/-]", "",
+        colid1
+      ) 
+    )
+  
+  funcfindabove_df2_unnest <- funcfindabove_df2 %>% 
+    tidytext::unnest_tokens(
+      output = idsplit,
+      input =id_no_simple, 
+      token = "regex", 
+      pattern = "/",
+      to_lower = FALSE, 
+      drop = FALSE
+    )
+      #%>% 
+    # cbind(
+    #   tibble(
+    #     colid = funcfindabove_idcol
+    #   )
+    # )
+  
+  funcfindabove_df2_abovebelow_notequal <- funcfindabove_df2 %>% 
+    filter(
+      (id_no_simple != lead(id_no_simple))&(id_no_simple != lag(id_no_simple)) 
+    )
+  funcfindabove_df2_abovebelow_notequal_equal <- funcfindabove_df2_abovebelow_notequal %>% 
+     filter(
+      (colmatch == lead(colmatch))|(colmatch == lag(colmatch)) 
+    )
+    funcfindabove_df2_abovebelow_notequal_notequal <- funcfindabove_df2_abovebelow_notequal %>% 
+     filter(
+      !rownum %in% c(funcfindabove_df2_abovebelow_notequal_equal$rownum)
+    )
 
+  
+  
+  funcfindabove_df2_abovebelow_notequalLU <- funcfindabove_df2 %>% filter(
+    rownum %in% c(funcfindabove_df2_abovebelow_notequal$rownum)
+  ) 
+  funcfindabove_df2_abovebelow_notequaljoin <- funcfindabove_df2_abovebelow_notequal %>% 
+    left_join(
+      
+    )
+  
+  funcfindabove_df2_out <- funcfindabove_df2 %>% 
+    
+    mutate(
+      idcorrect = 
+        case_when(
+          (colid1 != lead(colid1))|(colid1 != lag(colid1)) ~ 
+            g
+        )
+    )
+  
+}
 ```
 
-## actual function to split pdfs
+### actual function to split pdfs
 ```{R }
 
 func_to_split_by_init <- function(funcsplit_df,  funcsplit_pattern )
@@ -730,7 +890,39 @@ require(splitstackshape)
   
   
   data(fips_code)
+  require(splitstackshape)
+require(inline)
   
+.char_unique_code <- "
+std::vector < std::string > s = as< std::vector < std::string > >(x);
+unsigned int input_size = s.size();
+
+std::vector < std::string > chrs(input_size);
+
+for (unsigned int i=0; i<input_size; i++) {
+
+  std::string t = s[i];
+
+  for (std::string::iterator chr=t.begin();
+       chr != t.end(); ++chr) {
+
+    if (chrs[i].find(*chr) == std::string::npos) {
+      chrs[i] += *chr;
+    }
+
+  }
+
+}
+return(wrap(chrs));
+"
+
+char_unique <- 
+  rcpp(sig=signature(x="std::vector < std::string >"),
+       body=.char_unique_code,
+       includes=c("#include <string>",
+                 "#include <iostream>"))
+
+
   ### first M+ (M203), 
   
     # splitinto_pattern_MP <- "M[[:digit:]]+|[[:digit:]]+M|P[[:digit:]]+|[[:digit:]]+P"
@@ -756,37 +948,6 @@ funcsplit_pattern_maxnum = (funcsplit_pattern %>%
    ncharcombo == max(ncharcombo)
   ))$combination[1]%>% char_unique() %>% nchar()
 
-require(splitstackshape)
-require(inline)
-char_unique <- 
-  rcpp(sig=signature(x="std::vector < std::string >"),
-       body=.char_unique_code,
-       includes=c("#include <string>",
-                 "#include <iostream>"))
-
-
-.char_unique_code <- "
-std::vector < std::string > s = as< std::vector < std::string > >(x);
-unsigned int input_size = s.size();
-
-std::vector < std::string > chrs(input_size);
-
-for (unsigned int i=0; i<input_size; i++) {
-
-  std::string t = s[i];
-
-  for (std::string::iterator chr=t.begin();
-       chr != t.end(); ++chr) {
-
-    if (chrs[i].find(*chr) == std::string::npos) {
-      chrs[i] += *chr;
-    }
-
-  }
-
-}
-return(wrap(chrs));
-"
 
 # fsis_init_LU_combo_patterns <- funcsplit_pattern %>% 
 #   summarise(
@@ -903,21 +1064,32 @@ dftext_sep_not_prefix <- dftext_sep%>%
     !grepl("\\([[:digit:]][[:digit:]][[:digit:]]\\)", text, perl = TRUE)
   ) %>% 
   mutate(
-    text_onlyalphanum = gsub("[^A-Za-z0-9/]", "", text)
+    text_onlyalphanum = gsub("[^A-Za-z0-9/]", "", text),
+    text_onlnum_noslash = gsub("[^A-Za-z0-9]", "", text)
+
   ) %>% 
   filter(
         !(grepl(
       "[[:digit:]][[:digit:]][[:digit:]][[:digit:]][[:digit:]][[:digit:]][[:digit:]][[:digit:]][[:digit:]][[:digit:]]|STREET|ROAD|DRIVE|USDA|PLANT|BLVD|RT|RTE|PLACE|WAY|MAIL|AVE|BOX|LOOP|HWY|Room|DR|Ext|fill|top|STE", 
       text_onlyalphanum, perl = TRUE, ignore.case = TRUE
     )), 
+     !(grepl(
+      "[[:digit:]][[:digit:]][[:digit:]][[:digit:]][[:digit:]][[:digit:]][[:digit:]][[:digit:]][[:digit:]][[:digit:]]", 
+      text_onlnum_noslash, perl = TRUE, ignore.case = TRUE
+    )), 
+
     #remove telephones
     !(grepl(
-      "[[:digit:]][[:digit:]][[:digit:]]-[[:digit:]][[:digit:]][[:digit:]]-[[:digit:]][[:digit:]][[:digit:]]",
+      "[[:digit:]][[:digit:]][[:digit:]]-[[:digit:]][[:digit:]][[:digit:]]-[[:digit:]][[:digit:]][[:digit:]] FM |ROAD",
       
-      text
-    )
-
-  )
+      text, 
+      perl = TRUE
+    ))#, 
+    # !(grepl(
+    #   " FM |ROAD",
+    #   
+    #   text
+    # ))
   )
 
 
@@ -1080,7 +1252,7 @@ dftext_sep_bottomtop_id <- dftext_sep_not_prefix_bottomtop%>%
   arrange(
     rownum
   )
-
+# this takes the rest of them and 
 dftext_sep_not_prefix_remainder <- dftext_sep_not_prefix  %>% 
   filter(
     !rownum %in% c(dftext_sep_bottomtop_id$rownum ) 
@@ -1108,7 +1280,8 @@ funcsplit_splitinto(
     !is.na(id_no), 
   )
 # this will correct for unreognized I = 1, S = 5, Q = 0, 0 = O
-funcsplit_pattern_replace_numalphatext <-  c(
+funcsplit_pattern_replace_numalphatext <-  tibble(
+  pattern = c(
   ### P 
   ### I = 1
   "IP-[[:digit:]]+",
@@ -1148,8 +1321,38 @@ funcsplit_pattern_replace_numalphatext <-  c(
   "!M-[[:digit:]]+",
   "![a-zA-Z]+M-[[:digit:]]+" 
   
-)
+), 
+replace = c(
+                "P-replace",
+              "P-replace",
+              "P-replace",
+              "P-replace", 
+              "P-replace", 
+              "P-replace", 
+              "P-replace", 
+              "P-replace", 
+              "P-replace", 
+              "P-replace", 
+               "P-replace", 
+               "P-replace", 
+              "M-replace", 
 
+              "M-replace", 
+
+              "M-replace", 
+              "M-replace",  
+              "M-replace", 
+              "M-replace",  
+              "M-replace", 
+              "M-replace",  
+              "M-replace", 
+              "M-replace",
+              "M-replace",  
+              "M-replace"
+
+)
+)
+# this looks for other matches to pattern
 dftext_sep_not_prefix_id_correct <-dftext_sep_bottomtop_id %>%
   filter(
    !rownum %in% c(dftext_sep_not_prefix_remainder_id$rownum ) 
@@ -1177,39 +1380,12 @@ dftext_sep_not_prefix_id_correct <-dftext_sep_bottomtop_id %>%
           mgsub(
             string = id_no, 
             pattern = c(
-              funcsplit_pattern_replace_numalphatext
+              funcsplit_pattern_replace_numalphatext$pattern
             ), 
-            replacement  = c(
-              "P-replace",
-              "P-replace",
-              "P-replace",
-              "P-replace", 
-              "P-replace", 
-              "P-replace", 
-              "P-replace", 
-              "P-replace", 
-              "P-replace", 
-              "P-replace", 
-               "P-replace", 
-               "P-replace", 
-              "M-replace", 
+            replacement  = funcsplit_pattern_replace_numalphatext$replace
 
-              "M-replace", 
-
-              "M-replace", 
-              "M-replace",  
-              "M-replace", 
-              "M-replace",  
-              "M-replace", 
-              "M-replace",  
-              "M-replace", 
-              "M-replace",
-              "M-replace",  
-              "M-replace"
-
-              ) 
-          )
-        , 
+              
+          )  , 
         TRUE ~ id_no
       ), 
     id_no = gsub(
@@ -1311,7 +1487,7 @@ dftext_sep_not_prefix_id_correct_pagenumber <-  dftext%>%
   
 dftext_sep_id_correct <- dftext_sep_not_prefix_id_correct %>%
   select(
-    text:texttype, id_no# ,
+    text:texttype, id_no:id_onlydecimal_convert_I_1# ,
     # contains(
     #   "id_onlydecimal_convert_I_1_"
     # )
@@ -1341,7 +1517,8 @@ dftext_sep_bottomtop_id_extract <- dftext_sep_bottomtop_id %>%
   filter(
     (likelyidtype == lag(likelyidtype))|
       (likelyidtype == lead(likelyidtype))
-  ) 
+  ) %>% 
+  ungroup()
 
 estdata_id %>% 
   filter(
